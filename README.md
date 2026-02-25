@@ -26,19 +26,19 @@ Before writing code, several deliberate infrastructure choices were made:
 
 * **Trade-off:** Ease of use vs. Binary Size.
 * **Decision:** I chose to compile the C++ engine from source using Bazel. Pre-compiled libraries contain massive amounts of overhead for legacy models (audio, image segmentation, etc.). By feeding the Gemma 3 model directly into the Bazel compiler, the build system selectively included *only* the specific GenAI operations needed (such as INT4 memory decompression).
-* **Result:** Result: The final compiled AI engine (`TensorFlowLiteC.framework`) is a remarkably lightweight **11.6 MB**, avoiding severe app bloat.
+* **Result:** Result: The final compiled AI engine (`TensorFlowLiteC.framework`) is a remarkably lightweight **11.6 MB**. This avoids severe app bloat from a standard, pre-compiled "Fat" TensorFlow Lite framework with all architectures and operations that could easily be 50MB to 100MB+.
 
-**2. Physical Device (`arm64`) vs. iOS Simulator (`x86_64`)**
-
-* **Trade-off:** Developer convenience vs. Accurate Profiling & Build Stability.
-* **Decision:** I explicitly stripped the `x86_64` (Intel Mac) architecture from the build target. Apple has deprecated "Fat Frameworks," and attempting to build them often causes SDK collisions in modern build systems. More importantly, testing an AI model on a Mac Simulator with 16GB+ of RAM defeats the purpose of on-device engineering.
-* **Result:** The framework targets `arm64` exclusively, ensuring that when the model runs, it is accurately subjected to the iPhone's physical thermal throttling and strict iOS Jetsam memory eviction limits.
-
-**3. INT4 Quantization Precision**
+**2. INT4 Quantization Precision**
 
 * **Trade-off:** Model Quality (Perplexity) vs. RAM footprint.
 * **Decision:** I utilized the **INT4 Quantization-Aware Trained (QAT)** version of Gemma 3 1B.
 * **Result:** At roughly ~540MB to ~892MB, this 4-bit integer compression allows the model to sit comfortably in the background of an iPhone 15/16 Pro (which has 8GB of total system RAM) without triggering the OS Jetsam process to terminate the app during heavy multitasking.
+
+**3. Physical Device (`arm64`) vs. iOS Simulator (`x86_64`)**
+
+* **Trade-off:** Developer convenience vs. Accurate Profiling & Build Stability.
+* **Decision:** I explicitly stripped the `x86_64` (Intel Mac) architecture from the build target. Apple has deprecated "Fat Frameworks," and attempting to build them often causes SDK collisions in modern build systems. More importantly, testing an AI model on a Mac Simulator with 16GB+ of RAM defeats the purpose of on-device engineering.
+* **Result:** The framework targets `arm64` exclusively, ensuring that when the model runs, it is accurately subjected to the iPhone's physical thermal throttling and strict iOS Jetsam memory eviction limits.
 
 ### **The Engineering Journey (Challenges & Solutions)**
 
