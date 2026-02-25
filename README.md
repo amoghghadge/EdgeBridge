@@ -1,4 +1,4 @@
-## EdgeBridge: Custom iOS AI Runtime for Gemma 3
+# EdgeBridge: Custom iOS AI Runtime for Gemma 3
 
 📖 **Project Motivation (The "Why")**
 
@@ -12,13 +12,13 @@ However, achieving this on iOS in 2026 presents a massive systems engineering ch
 
 My goal with this project is to bridge this gap of deploying to edge devices, and build a native iOS application that acts as an intelligent, offline AI agent. It will use a "cascade" of two different Google AI models (FunctionGemma 270M and Gemma 3 1B) to handle tasks and chat, powered by a custom-built C++ inference engine that talks directly to Swift.
 
-### Component 1: The Engine (Custom LiteRT Build & Quantization)
+## Component 1: The Engine (Custom LiteRT Build & Quantization)
 
 By relying purely on pre-compiled CocoaPods or standard Apple Core ML, I would be blocked. Apple's Core ML ecosystem can introduce behavioral inconsistencies when porting Google-trained models, and pre-compiled TensorFlow Lite pods are bloated with hundreds of unused legacy operations.
 
 **The Solution:** EdgeBridge bypasses the high-level wrappers entirely. This project involves downloading Google's raw **LiteRT** (formerly TensorFlow Lite) C++ source code, utilizing Google's **Bazel** build system, and executing a **Selective Build**. By analyzing the specific mathematical operations required by the Gemma 3 model, I compiled a custom, stripped-down C++ inference engine tailored explicitly for the physical iPhone (arm64) architecture.
 
-#### **Architectural Trade-offs & Design Choices**
+### **Architectural Trade-offs & Design Choices**
 
 Before writing code, several deliberate infrastructure choices were made:
 
@@ -40,7 +40,7 @@ Before writing code, several deliberate infrastructure choices were made:
 * **Decision:** I utilized the **INT4 Quantization-Aware Trained (QAT)** version of Gemma 3 1B.
 * **Result:** At roughly ~540MB to ~892MB, this 4-bit integer compression allows the model to sit comfortably in the background of an iPhone 15/16 Pro (which has 8GB of total system RAM) without triggering the OS Jetsam process to terminate the app during heavy multitasking.
 
-#### **The Engineering Journey (Challenges & Solutions)**
+### **The Engineering Journey (Challenges & Solutions)**
 
 Building Google's internal infrastructure on a local macOS environment is notoriously difficult. Below is the documentation of the system-level challenges encountered during the Bazel compilation phase and the architectural patches applied to solve them.
 
