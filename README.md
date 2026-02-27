@@ -100,6 +100,7 @@ With the release of **Swift 5.9**, Apple introduced bidirectional C++ Interopera
 **Challenge 1: The `mutating` Member View Crash**
 
 **The Problem:** During the initial bridge testing, attempting to call a C++ function (`testBridge()`) directly from the SwiftUI `body` resulted in a compiler error: `Cannot use mutating member on immutable value: 'self' is immutable`. Because Swift imports C++ classes as value types, it assumes any C++ member function without a `const` qualifier might mutate the object's underlying memory. This violates SwiftUI's strict declarative, immutable rendering loop.
+
 **The Solution:**
 1.  **C++ Const Correctness:** I refactored the C++ definitions, applying `const` qualifiers to deterministic methods (e.g., `std::string testBridge() const;`) so Swift could safely parse them as non-mutating.
 2.  **Event-Driven Architecture:** For the future stateful generative loop (which *must* mutate the KV cache and tensor buffers), I decoupled the engine from the view hierarchy. The C++ instance is held in `@State`, and inference commands are dispatched strictly through asynchronous Action Closures (e.g., button presses), adhering to iOS concurrency rules.
