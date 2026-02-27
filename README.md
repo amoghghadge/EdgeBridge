@@ -60,6 +60,7 @@ Building Google's internal infrastructure on a local macOS environment is notori
 **Challenge 4: The Host vs. Target Sandbox Collision**
 
 **The Problem:** Bazel compiles code inside an isolated, hermetic "sandbox." While compiling the 2,000+ C++ files for the iOS Target, it successfully found the iPhone SDK. However, at the very end of the build, it attempted to compile a small Apple Instruments profiling tool (`signpost_profiler.mm`) for the Mac Host. The sandbox stripped the `DEVELOPER_DIR` and `SDKROOT` environment variables, blinding the `wrapped_clang_pp` compiler to the location of Xcode. Attempting to forcefully inject the paths globally caused a fatal Java exception (`Multiple entries with same key: SDKROOT`) because Bazel tried to map the iOS SDK and Mac SDK to the same dictionary key.
+
 **The Solution:**
 1.  Used `sudo xcode-select -s` to register the Xcode path globally at the macOS level.
 2.  Passed the `--noincompatible_strict_action_env` flag to Bazel, poking a hole in the sandbox so the host compiler could inherit the system environment naturally without colliding with the iOS target's internal paths.
