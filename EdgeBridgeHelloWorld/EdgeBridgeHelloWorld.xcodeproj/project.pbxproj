@@ -7,8 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		CAF863462F52AA830055D8B2 /* TensorFlowLiteC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CAF863452F52AA830055D8B2 /* TensorFlowLiteC.framework */; };
-		CAF863472F52AA830055D8B2 /* TensorFlowLiteC.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = CAF863452F52AA830055D8B2 /* TensorFlowLiteC.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		CA60EDB12F53776900D50066 /* TensorFlowLiteC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EDB02F53776800D50066 /* TensorFlowLiteC.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -18,7 +17,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				CAF863472F52AA830055D8B2 /* TensorFlowLiteC.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -26,8 +24,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		CA60EDB02F53776800D50066 /* TensorFlowLiteC.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = TensorFlowLiteC.framework; path = Frameworks/TensorFlowLiteC.framework; sourceTree = "<group>"; };
 		CAF863322F5218CE0055D8B2 /* EdgeBridgeHelloWorld.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EdgeBridgeHelloWorld.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		CAF863452F52AA830055D8B2 /* TensorFlowLiteC.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = TensorFlowLiteC.framework; path = ../TensorFlowLiteC.framework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -43,7 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CAF863462F52AA830055D8B2 /* TensorFlowLiteC.framework in Frameworks */,
+				CA60EDB12F53776900D50066 /* TensorFlowLiteC.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,7 +68,7 @@
 		CAF863442F52AA830055D8B2 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				CAF863452F52AA830055D8B2 /* TensorFlowLiteC.framework */,
+				CA60EDB02F53776800D50066 /* TensorFlowLiteC.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -286,7 +284,12 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R66MJNV8T6;
 				ENABLE_PREVIEWS = YES;
+				FRAMEWORK_SEARCH_PATHS = "$(SRCROOT)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					/Users/Amogh/Workspace/Mobile_Apps/LiteRT,
+					"$(SRCROOT)/flatbuffers/include",
+				);
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -322,7 +325,12 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R66MJNV8T6;
 				ENABLE_PREVIEWS = YES;
+				FRAMEWORK_SEARCH_PATHS = "$(SRCROOT)/Frameworks";
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					/Users/Amogh/Workspace/Mobile_Apps/LiteRT,
+					"$(SRCROOT)/flatbuffers/include",
+				);
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

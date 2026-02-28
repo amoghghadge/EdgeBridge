@@ -1,26 +1,33 @@
-//
-//  GemmaEngine.cpp
-//  EdgeBridgeHelloWorld
-//
-//  Created by Amogh Ghadge on 2/27/26.
-//
-
 #include "GemmaEngine.hpp"
+
+// All the heavy Google headers are safely hidden in here
+#include "tflite/model.h"
+#include "tflite/interpreter.h"
 #include <iostream>
 
-GemmaEngine::GemmaEngine() {
-    // We will initialize the interpreter here in Step 2
+GemmaEngine::GemmaEngine() {}
+
+// We manually cast the void pointers back to their true forms to delete them cleanly
+GemmaEngine::~GemmaEngine() {
+    if (interpreter) {
+        delete static_cast<tflite::Interpreter*>(interpreter);
+    }
+    if (model) {
+        delete static_cast<tflite::FlatBufferModel*>(model);
+    }
 }
 
 bool GemmaEngine::loadModel(const std::string& modelPath) {
-    // BuildFromFile implicitly executes the mmap() syscall under the hood.
-    // It maps the FlatBuffer weights directly from the iOS file system without copying them into the heap.
-    model = tflite::FlatBufferModel::BuildFromFile(modelPath.c_str());
+    // BuildFromFile natively executes the mmap() syscall on iOS.
+    auto mmap_model = tflite::FlatBufferModel::BuildFromFile(modelPath.c_str());
     
-    if (!model) {
+    if (!mmap_model) {
         std::cerr << "Failed to mmap model at: " << modelPath << std::endl;
         return false;
     }
+    
+    // Release the unique_ptr and save it into our void* shield
+    model = mmap_model.release();
     
     std::cout << "Successfully memory-mapped Gemma 3!" << std::endl;
     return true;
