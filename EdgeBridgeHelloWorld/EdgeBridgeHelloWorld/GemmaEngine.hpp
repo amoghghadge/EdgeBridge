@@ -5,16 +5,19 @@
 
 class GemmaEngine {
 private:
-    // We use "Opaque Pointers" (void*).
-    // This completely hides the underlying Google types from Swift!
+    // We use "Opaque Pointers" (void*) to hide Google's typedefs from Swift
     void* model = nullptr;
     void* interpreter = nullptr;
+    void* hardware_delegate = nullptr;
+    
+    // 0 = CPU, 1 = Metal (GPU), 2 = Core ML (NPU)
+    int current_backend = 0;
 
 public:
     GemmaEngine();
     ~GemmaEngine();
     
-    bool loadModel(const std::string& modelPath);
+    bool loadModel(const std::string& modelPath, int backend);
     std::string testBridge() const;
 };
 

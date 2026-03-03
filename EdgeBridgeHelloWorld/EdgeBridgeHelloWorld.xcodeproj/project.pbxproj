@@ -8,6 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		CA60EDB12F53776900D50066 /* TensorFlowLiteC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EDB02F53776800D50066 /* TensorFlowLiteC.framework */; };
+		CA60EDB92F5662E800D50066 /* TensorFlowLiteCMetal.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EDB82F5662E800D50066 /* TensorFlowLiteCMetal.xcframework */; };
+		CA60EDBB2F5662F200D50066 /* TensorFlowLiteCCoreML.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EDBA2F5662F200D50066 /* TensorFlowLiteCCoreML.xcframework */; };
+		CA60EDBD2F5664AF00D50066 /* CoreML.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EDBC2F5664AF00D50066 /* CoreML.framework */; };
+		CA60EDBF2F5664B700D50066 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EDBE2F5664B700D50066 /* Metal.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -25,6 +29,10 @@
 
 /* Begin PBXFileReference section */
 		CA60EDB02F53776800D50066 /* TensorFlowLiteC.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = TensorFlowLiteC.framework; path = Frameworks/TensorFlowLiteC.framework; sourceTree = "<group>"; };
+		CA60EDB82F5662E800D50066 /* TensorFlowLiteCMetal.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = TensorFlowLiteCMetal.xcframework; path = Frameworks/TensorFlowLiteCMetal.xcframework; sourceTree = "<group>"; };
+		CA60EDBA2F5662F200D50066 /* TensorFlowLiteCCoreML.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = TensorFlowLiteCCoreML.xcframework; path = Frameworks/TensorFlowLiteCCoreML.xcframework; sourceTree = "<group>"; };
+		CA60EDBC2F5664AF00D50066 /* CoreML.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreML.framework; path = System/Library/Frameworks/CoreML.framework; sourceTree = SDKROOT; };
+		CA60EDBE2F5664B700D50066 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		CAF863322F5218CE0055D8B2 /* EdgeBridgeHelloWorld.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EdgeBridgeHelloWorld.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -41,7 +49,11 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CA60EDBF2F5664B700D50066 /* Metal.framework in Frameworks */,
+				CA60EDBD2F5664AF00D50066 /* CoreML.framework in Frameworks */,
+				CA60EDB92F5662E800D50066 /* TensorFlowLiteCMetal.xcframework in Frameworks */,
 				CA60EDB12F53776900D50066 /* TensorFlowLiteC.framework in Frameworks */,
+				CA60EDBB2F5662F200D50066 /* TensorFlowLiteCCoreML.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -68,7 +80,11 @@
 		CAF863442F52AA830055D8B2 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				CA60EDBE2F5664B700D50066 /* Metal.framework */,
+				CA60EDBC2F5664AF00D50066 /* CoreML.framework */,
 				CA60EDB02F53776800D50066 /* TensorFlowLiteC.framework */,
+				CA60EDB82F5662E800D50066 /* TensorFlowLiteCMetal.xcframework */,
+				CA60EDBA2F5662F200D50066 /* TensorFlowLiteCCoreML.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
