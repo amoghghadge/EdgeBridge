@@ -4,6 +4,7 @@
 //
 //  Created by Amogh Ghadge on 3/4/26.
 //
+//  App entry point. Just launches the ChatView.
 
 import SwiftUI
 
@@ -11,7 +12,7 @@ import SwiftUI
 struct EdgeBridgeApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ChatView()
         }
     }
 }
