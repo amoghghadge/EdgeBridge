@@ -19,6 +19,9 @@ public:
     
     bool loadModel(const std::string& modelPath, int backend);
     std::string testBridge() const;
+    
+    // Declare the generation method so the .cpp file can implement it
+    int generateNextToken();
 };
 
 #endif /* GemmaEngine_hpp */
