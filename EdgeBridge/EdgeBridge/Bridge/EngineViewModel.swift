@@ -5,35 +5,26 @@
 //  Created by Amogh Ghadge on 3/4/26.
 //
 
-import Foundation
-
 // ============================================================================
-// EngineViewModel.swift  (v4 — Real LiteRT-LM Integration)
+// EngineViewModel.swift  (v5 — Agentic Calendar Assistant)
 //
-// This ViewModel drives the SwiftUI chat interface by calling the C bridge
-// functions defined in litert_bridge_api.h. Those C functions are compiled
-// inside libLiteRTLM.a by Bazel and delegate to the full LiteRT-LM
-// Conversation API (Engine, Conversation, Session) internally.
+// Extends v4 with the agentic tool-calling loop. When the model responds
+// with a tool_calls JSON structure, the ViewModel dispatches to
+// CalendarToolExecutor, sends the result back to the model via
+// litert_conversation_send_tool_response(), and repeats until the model
+// produces a final text response.
 //
-// The bridging header (EdgeBridge-Bridging-Header.h) imports the C header,
-// making all litert_* functions directly callable from Swift with no
-// additional imports needed.
+// AGENTIC LOOP ARCHITECTURE:
+//   1. User sends message
+//   2. Model responds (might be text OR tool_calls)
+//   3. If tool_calls: parse → execute via CalendarToolExecutor → send result back → goto 2
+//   4. If text: display to user, loop ends
 //
-// ARCHITECTURE:
-//   SwiftUI ChatView
-//     → EngineViewModel (this file)
-//       → litert_engine_create()      [C function in libLiteRTLM.a]
-//       → litert_conversation_create() [C function in libLiteRTLM.a]
-//       → litert_conversation_send()   [C function in libLiteRTLM.a]
-//         → Engine::CreateSession()    [C++ inside the archive]
-//         → Conversation::SendMessage()[C++ inside the archive]
-//         → XNNPACK / Metal inference  [deep inside the archive]
-//
-// STREAMING:
-//   For the streaming path, we use litert_conversation_send_async() with
-//   a C callback. Since C function pointers can't capture Swift closures,
-//   we use the standard Unmanaged<> pattern to pass a Swift object as the
-//   void* context parameter.
+// The tool-calling loop uses blocking sends (litert_conversation_send)
+// rather than async streaming, because we need to inspect each response
+// to decide whether to continue the loop or display the result. The
+// final text response to the user uses the blocking path as well for
+// simplicity — we can upgrade to streaming for the final response later.
 // ============================================================================
 
 import SwiftUI
@@ -44,7 +35,7 @@ import Foundation
 @Observable
 class EngineViewModel {
     
-    // -- Published State for SwiftUI (same interface as v3) --
+    // -- Published State for SwiftUI --
     var messages: [ChatMessage] = []
     var isGenerating: Bool = false
     var isSwitchingBackend: Bool = false
@@ -52,37 +43,50 @@ class EngineViewModel {
     var currentBackend: String = "CPU"
     var benchmarkText: String = ""
     var statusMessage: String = "No model loaded"
+    var currentModelName: String = ""
     
     // -- Internal State --
-    // These are the opaque handles returned by the C API.
-    // They wrap C++ unique_ptr<Engine> and unique_ptr<Conversation>
-    // inside the static archive — we never see the C++ types.
     private var engineHandle: LiteRTEngineHandle?
     private var conversationHandle: LiteRTConversationHandle?
     private var currentModelPath: String?
     private var currentUseGPU: Bool = false
     
-    // -----------------------------------------------------------------------
-    // initialize — loads a .litertlm model and creates the engine.
-    //
-    // This is called from ChatView.onAppear. It runs the heavyweight
-    // model loading on a background thread so the UI stays responsive.
-    // Model loading involves reading the .litertlm file (potentially
-    // hundreds of MB), setting up the XNNPACK/Metal executor, and
-    // allocating KV-cache memory.
-    // -----------------------------------------------------------------------
+    // The calendar tool executor — interfaces with real EventKit.
+    private let calendarExecutor = CalendarToolExecutor()
+    
+    // Whether to enable tool calling (calendar agent mode).
+    // When false, the model runs as a plain chatbot.
+    var toolCallingEnabled: Bool = true
+    
+    // Maximum number of tool-call rounds per user message to prevent
+    // infinite loops if the model keeps producing tool calls.
+    private let maxToolRounds = 5
+    
+    // MARK: - Initialization
+    
+    /// Loads a .litertlm model and creates the engine + conversation.
+    /// When toolCallingEnabled is true, the conversation is created with
+    /// calendar tool declarations and a system prompt.
     func initialize(modelPath: String, useGPU: Bool) {
-        // Don't re-initialize if already loaded with the same config.
         guard engineHandle == nil else { return }
         
         currentModelPath = modelPath
         currentUseGPU = useGPU
         statusMessage = "Loading model..."
         
+        // Extract model name from the file path for display.
+        currentModelName = (modelPath as NSString).lastPathComponent
+            .replacingOccurrences(of: ".litertlm", with: "")
+        
         Task.detached { [self] in
+            // Request calendar permission early so it's ready when needed.
+            if self.toolCallingEnabled {
+                _ = await self.calendarExecutor.requestAccess()
+            }
+            
             let backend: LiteRTBackend = useGPU ? LITERT_BACKEND_GPU : LITERT_BACKEND_CPU
             
-            // Step 1: Create the Engine (heavyweight — loads model weights).
+            // Step 1: Create the Engine.
             var engine: LiteRTEngineHandle?
             let engineStatus = litert_engine_create(modelPath, backend, &engine)
             
@@ -94,15 +98,24 @@ class EngineViewModel {
                 return
             }
             
-            // Step 2: Create a Conversation (lightweight — sets up prompt
-            // template, tokenizer state, and optional tool declarations).
+            // Step 2: Create the Conversation with optional tools.
             var conversation: LiteRTConversationHandle?
-            let convStatus = litert_conversation_create(
-                engine,
-                nil,    // No system prompt for now; add later for agentic mode.
-                nil,    // No tool declarations for now; add later for tool calling.
-                &conversation
-            )
+            let convStatus: LiteRTStatus
+            
+            if self.toolCallingEnabled {
+                // Pass the calendar tools JSON and system prompt.
+                convStatus = litert_conversation_create(
+                    engine,
+                    ToolDeclarations.calendarSystemPrompt,
+                    ToolDeclarations.calendarToolsJSON,
+                    &conversation
+                )
+            } else {
+                // Plain chatbot mode — no tools, no system prompt.
+                convStatus = litert_conversation_create(
+                    engine, nil, nil, &conversation
+                )
+            }
             
             guard convStatus == LITERT_OK, let conversation = conversation else {
                 litert_engine_destroy(engine)
@@ -113,136 +126,221 @@ class EngineViewModel {
                 return
             }
             
-            // Step 3: Update UI state on the main thread.
             await MainActor.run {
                 self.engineHandle = engine
                 self.conversationHandle = conversation
                 self.isEngineReady = true
                 self.currentBackend = useGPU ? "GPU (Metal)" : "CPU (XNNPACK)"
-                self.statusMessage = "Model loaded — ready to chat"
+                self.statusMessage = self.toolCallingEnabled
+                    ? "Calendar assistant ready"
+                    : "Model loaded — ready to chat"
             }
         }
     }
     
-    // -----------------------------------------------------------------------
-    // sendMessage — sends user input to the model and streams the response.
-    //
-    // Uses the async streaming path (litert_conversation_send_async) so
-    // tokens appear in the UI as they're generated, giving the user
-    // immediate feedback. Falls back to blocking send if streaming fails.
-    // -----------------------------------------------------------------------
+    // MARK: - Send Message (with Agentic Loop)
+    
+    /// Sends a user message and runs the agentic tool-calling loop.
+    /// The loop continues until the model produces a text response
+    /// (no tool calls) or we hit the maximum number of tool rounds.
     func sendMessage(_ text: String) {
         guard let engine = engineHandle,
               let conversation = conversationHandle,
               isEngineReady else { return }
         
-        // Add the user's message to the chat immediately.
+        // Add the user's message to the chat.
         let userMessage = ChatMessage(role: .user, content: text)
         messages.append(userMessage)
         isGenerating = true
         
-        // Create a placeholder for the assistant's streaming response.
-        // We'll accumulate tokens into this and update the UI progressively.
-        let assistantId = UUID()
-        let placeholder = ChatMessage(role: .assistant, content: "", id: assistantId)
-        messages.append(placeholder)
-        
         Task.detached { [self] in
-            // We use the streaming API with a C callback. The callback
-            // receives each token chunk on a background thread, and we
-            // dispatch to MainActor to update the UI.
+            // Send the user's message to the model.
+            var responsePtr: UnsafePointer<CChar>?
+            let status = litert_conversation_send(conversation, text, &responsePtr)
             
-            // StreamContext holds the accumulated text and a reference
-            // back to the ViewModel so the C callback can update state.
-            let context = StreamContext(
-                viewModel: self,
-                messageId: assistantId
-            )
-            
-            // Retain the context so it survives across callback invocations.
-            // We'll release it when streaming completes (nil token).
-            let contextPtr = Unmanaged.passRetained(context).toOpaque()
-            
-            let status = litert_conversation_send_async(
-                conversation,
-                text,
-                streamCallbackFunction,  // Global C-compatible function defined below.
-                contextPtr
-            )
-            
-            if status != LITERT_OK {
-                // If async fails, fall back to blocking send.
-                Unmanaged<StreamContext>.fromOpaque(contextPtr).release()
-                self.fallbackBlockingSend(conversation: conversation, engine: engine, text: text, assistantId: assistantId)
+            guard status == LITERT_OK, let ptr = responsePtr else {
+                await MainActor.run {
+                    self.messages.append(ChatMessage(
+                        role: .assistant,
+                        content: "[Error: inference failed with code \(status.rawValue)]"
+                    ))
+                    self.isGenerating = false
+                }
                 return
             }
             
-            // Wait for the model to finish generating.
-            _ = litert_engine_wait(engine, 600_000)  // 10 minute timeout.
+            var responseText = String(cString: ptr)
+            var toolRound = 0
             
-            // Update benchmark info after generation completes.
+            // === AGENTIC LOOP ===
+            // Keep looping while the model produces tool calls.
+            while self.isToolCallResponse(responseText) && toolRound < self.maxToolRounds {
+                toolRound += 1
+                
+                // Parse the tool call(s) from the model's response.
+                let toolCalls = self.parseToolCalls(responseText)
+                
+                for toolCall in toolCalls {
+                    // Show the tool call in the chat UI.
+                    let toolCallDisplay = self.formatToolCallDisplay(toolCall)
+                    await MainActor.run {
+                        self.messages.append(ChatMessage(
+                            role: .toolCall,
+                            content: toolCallDisplay,
+                            toolName: toolCall.name
+                        ))
+                    }
+                    
+                    // Execute the tool via CalendarToolExecutor.
+                    let toolResult = await self.calendarExecutor.execute(
+                        functionName: toolCall.name,
+                        arguments: toolCall.arguments
+                    )
+                    
+                    // Show the tool result in the chat UI.
+                    let resultDisplay = self.formatToolResultDisplay(toolCall.name, result: toolResult)
+                    await MainActor.run {
+                        self.messages.append(ChatMessage(
+                            role: .toolResult,
+                            content: resultDisplay,
+                            toolName: toolCall.name
+                        ))
+                    }
+                    
+                    // Send the tool result back to the model.
+                    var nextResponsePtr: UnsafePointer<CChar>?
+                    let nextStatus = litert_conversation_send_tool_response(
+                        conversation, toolResult, &nextResponsePtr
+                    )
+                    
+                    if nextStatus == LITERT_OK, let nextPtr = nextResponsePtr {
+                        responseText = String(cString: nextPtr)
+                    } else {
+                        // Tool response failed — break out of the loop.
+                        responseText = "[Error: failed to send tool response]"
+                        break
+                    }
+                }
+            }
+            
+            // === FINAL RESPONSE ===
+            // The model has produced a text response (not a tool call).
             await MainActor.run {
+                self.messages.append(ChatMessage(
+                    role: .assistant,
+                    content: responseText
+                ))
                 self.isGenerating = false
                 self.updateBenchmark()
             }
         }
     }
     
-    // -----------------------------------------------------------------------
-    // fallbackBlockingSend — used if async streaming isn't available.
-    //
-    // Calls litert_conversation_send() which blocks until the full
-    // response is generated, then updates the UI all at once.
-    // -----------------------------------------------------------------------
-    private func fallbackBlockingSend(
-        conversation: LiteRTConversationHandle,
-        engine: LiteRTEngineHandle,
-        text: String,
-        assistantId: UUID
-    ) {
-        var responsePtr: UnsafePointer<CChar>?
-        let status = litert_conversation_send(conversation, text, &responsePtr)
+    // MARK: - Tool Call Detection and Parsing
+    
+    /// Checks if a response string contains tool calls.
+    /// The C bridge returns tool_calls as a JSON string when the model
+    /// wants to invoke a function.
+    private func isToolCallResponse(_ response: String) -> Bool {
+        return response.contains("\"tool_calls\"")
+    }
+    
+    /// Represents a single parsed tool call from the model.
+    struct ToolCall {
+        let name: String
+        let arguments: [String: Any]
+    }
+    
+    /// Parses tool calls from the model's JSON response.
+    /// Expected format (from litert_bridge_api.cc's ExtractTextFromMessage):
+    /// {"tool_calls": [{"type": "function", "function": {"name": "...", "arguments": {...}}}]}
+    private func parseToolCalls(_ response: String) -> [ToolCall] {
+        guard let data = response.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let toolCalls = json["tool_calls"] as? [[String: Any]]
+        else {
+            return []
+        }
         
-        Task { @MainActor in
-            if status == LITERT_OK, let ptr = responsePtr {
-                let response = String(cString: ptr)
-                // Replace the placeholder message with the full response.
-                if let idx = self.messages.firstIndex(where: { $0.id == assistantId }) {
-                    self.messages[idx] = ChatMessage(
-                        role: .assistant,
-                        content: response,
-                        id: assistantId
-                    )
-                }
-            } else {
-                if let idx = self.messages.firstIndex(where: { $0.id == assistantId }) {
-                    self.messages[idx] = ChatMessage(
-                        role: .assistant,
-                        content: "[Error: inference failed with code \(status.rawValue)]",
-                        id: assistantId
-                    )
-                }
+        return toolCalls.compactMap { call in
+            guard let function = call["function"] as? [String: Any],
+                  let name = function["name"] as? String
+            else {
+                return nil
             }
-            self.isGenerating = false
-            self.updateBenchmark()
+            let arguments = function["arguments"] as? [String: Any] ?? [:]
+            return ToolCall(name: name, arguments: arguments)
         }
     }
     
-    // -----------------------------------------------------------------------
-    // toggleBackend — tears down the current engine and recreates it
-    // with the opposite backend (CPU ↔ GPU).
-    //
-    // This is the real deal — it destroys the Conversation and Engine
-    // C++ objects (freeing model weights from memory), then reloads
-    // everything with the new backend configuration.
-    // -----------------------------------------------------------------------
+    // MARK: - Tool Call Display Formatting
+    
+    /// Formats a tool call for display in the chat UI.
+    /// Shows a user-friendly description of what the model is doing.
+    private func formatToolCallDisplay(_ toolCall: ToolCall) -> String {
+        switch toolCall.name {
+        case "get_todays_events":
+            return "📅 Checking today's schedule..."
+        case "get_events_for_date":
+            let date = toolCall.arguments["date"] as? String ?? "unknown date"
+            return "📅 Checking schedule for \(date)..."
+        case "find_free_slots":
+            let date = toolCall.arguments["date"] as? String ?? "unknown date"
+            let duration = toolCall.arguments["duration_minutes"] as? Int ?? 0
+            return "🔍 Finding \(duration)-minute free slots on \(date)..."
+        case "create_event":
+            let title = toolCall.arguments["title"] as? String ?? "New Event"
+            return "➕ Creating event: \(title)..."
+        case "delete_event":
+            return "🗑️ Deleting event..."
+        case "get_upcoming_events":
+            let count = toolCall.arguments["count"] as? Int ?? 5
+            return "📋 Getting next \(count) upcoming events..."
+        default:
+            return "🔧 Calling \(toolCall.name)..."
+        }
+    }
+    
+    /// Formats a tool result for display in the chat UI.
+    /// Provides a brief summary rather than showing raw JSON.
+    private func formatToolResultDisplay(_ toolName: String, result: String) -> String {
+        // Parse the result JSON to extract key info.
+        guard let data = result.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return "✅ Tool executed"
+        }
+        
+        if let error = json["error"] as? String {
+            return "❌ \(error)"
+        }
+        
+        switch toolName {
+        case "get_todays_events", "get_events_for_date", "get_upcoming_events":
+            let count = json["event_count"] as? Int ?? json["count_returned"] as? Int ?? 0
+            return "✅ Found \(count) event\(count == 1 ? "" : "s")"
+        case "find_free_slots":
+            let count = json["free_slots_count"] as? Int ?? 0
+            return "✅ Found \(count) available slot\(count == 1 ? "" : "s")"
+        case "create_event":
+            let title = json["title"] as? String ?? "Event"
+            return "✅ Created: \(title)"
+        case "delete_event":
+            let title = json["deleted_title"] as? String ?? "Event"
+            return "✅ Deleted: \(title)"
+        default:
+            return "✅ Done"
+        }
+    }
+    
+    // MARK: - Backend Toggle
+    
     func toggleBackend(useGPU: Bool) {
         guard let modelPath = currentModelPath else { return }
         
         isSwitchingBackend = true
         
         Task.detached { [self] in
-            // Destroy existing conversation and engine.
             if let conv = self.conversationHandle {
                 litert_conversation_destroy(conv)
             }
@@ -256,7 +354,6 @@ class EngineViewModel {
                 self.isEngineReady = false
             }
             
-            // Recreate with the new backend.
             let backend: LiteRTBackend = useGPU ? LITERT_BACKEND_GPU : LITERT_BACKEND_CPU
             
             var engine: LiteRTEngineHandle?
@@ -271,7 +368,18 @@ class EngineViewModel {
             }
             
             var conversation: LiteRTConversationHandle?
-            let convStatus = litert_conversation_create(engine, nil, nil, &conversation)
+            let convStatus: LiteRTStatus
+            
+            if self.toolCallingEnabled {
+                convStatus = litert_conversation_create(
+                    engine,
+                    ToolDeclarations.calendarSystemPrompt,
+                    ToolDeclarations.calendarToolsJSON,
+                    &conversation
+                )
+            } else {
+                convStatus = litert_conversation_create(engine, nil, nil, &conversation)
+            }
             
             guard convStatus == LITERT_OK, let conversation = conversation else {
                 litert_engine_destroy(engine)
@@ -289,21 +397,20 @@ class EngineViewModel {
                 self.currentUseGPU = useGPU
                 self.currentBackend = useGPU ? "GPU (Metal)" : "CPU (XNNPACK)"
                 self.isSwitchingBackend = false
-                self.statusMessage = "Backend switched to \(self.currentBackend)"
+                self.statusMessage = self.toolCallingEnabled
+                    ? "Calendar assistant ready"
+                    : "Backend switched to \(self.currentBackend)"
             }
         }
     }
     
-    // -----------------------------------------------------------------------
-    // updateBenchmark — retrieves timing metrics from the last inference.
-    // -----------------------------------------------------------------------
+    // MARK: - Benchmark
+    
     private func updateBenchmark() {
         guard let conversation = conversationHandle else { return }
         var info = LiteRTBenchmarkInfo()
         let status = litert_get_benchmark_info(conversation, &info)
         if status == LITERT_OK {
-            // Only show non-zero metrics (the C struct may be zeroed
-            // if benchmark data isn't available yet).
             if info.prefill_tokens_per_sec > 0 || info.decode_tokens_per_sec > 0 {
                 benchmarkText = String(
                     format: "TTFT: %.0fms | Prefill: %.0f tok/s | Decode: %.1f tok/s",
@@ -315,10 +422,8 @@ class EngineViewModel {
         }
     }
     
-    // -----------------------------------------------------------------------
-    // cleanup — called when the view disappears or the app terminates.
-    // Ensures all C++ resources are properly freed.
-    // -----------------------------------------------------------------------
+    // MARK: - Cleanup
+    
     func cleanup() {
         if let conv = conversationHandle {
             litert_conversation_destroy(conv)
@@ -336,66 +441,6 @@ class EngineViewModel {
     }
 }
 
-// MARK: - Streaming Callback Infrastructure
-
-/// StreamContext holds state that the C streaming callback needs access to.
-/// It's passed as an opaque void* pointer through the C API, then recovered
-/// inside the callback using Unmanaged<>.
-///
-/// This is the standard pattern for bridging C callbacks to Swift — since
-/// C function pointers can't capture context (no closures), you smuggle
-/// a reference to a Swift object through the void* parameter.
-class StreamContext {
-    weak var viewModel: EngineViewModel?
-    let messageId: UUID
-    var accumulatedText: String = ""
-    
-    init(viewModel: EngineViewModel, messageId: UUID) {
-        self.viewModel = viewModel
-        self.messageId = messageId
-    }
-}
-
-/// The global C-compatible callback function for streaming tokens.
-///
-/// This function has the signature `void (*)(const char*, void*)` matching
-/// the LiteRTStreamCallback typedef. It's called on a background thread
-/// by the LiteRT-LM engine for each generated token chunk.
-///
-/// - token: The next chunk of UTF-8 text, or NULL to signal end-of-stream.
-/// - rawContext: An opaque pointer to our StreamContext object.
-private let streamCallbackFunction: LiteRTStreamCallback = { token, rawContext in
-    guard let rawContext = rawContext else { return }
-    
-    // Recover our Swift StreamContext from the opaque pointer.
-    // We use takeUnretainedValue() during streaming (don't release yet)
-    // and takeRetainedValue() on the final nil-token call (releases).
-    if let token = token {
-        let context = Unmanaged<StreamContext>.fromOpaque(rawContext).takeUnretainedValue()
-        let chunk = String(cString: token)
-        context.accumulatedText += chunk
-        
-        // Dispatch UI update to the main thread.
-        let text = context.accumulatedText
-        let msgId = context.messageId
-        
-        DispatchQueue.main.async {
-            guard let vm = context.viewModel else { return }
-            if let idx = vm.messages.firstIndex(where: { $0.id == msgId }) {
-                vm.messages[idx] = ChatMessage(
-                    role: .assistant,
-                    content: text,
-                    id: msgId
-                )
-            }
-        }
-    } else {
-        // nil token = end of stream. Release the retained context.
-        let context = Unmanaged<StreamContext>.fromOpaque(rawContext).takeRetainedValue()
-        _ = context  // Allow ARC to clean up.
-    }
-}
-
 // MARK: - ChatMessage
 
 struct ChatMessage: Identifiable {
@@ -403,34 +448,28 @@ struct ChatMessage: Identifiable {
     let role: Role
     let content: String
     let timestamp = Date()
+    let toolName: String?  // For tool call/result messages.
     
-    /// Convenience initializer that auto-generates an ID.
-    init(role: Role, content: String, id: UUID = UUID()) {
+    init(role: Role, content: String, id: UUID = UUID(), toolName: String? = nil) {
         self.id = id
         self.role = role
         self.content = content
+        self.toolName = toolName
     }
     
     enum Role {
         case user
         case assistant
-        case toolResult
+        case toolCall     // "📅 Checking schedule..." — what the model is doing.
+        case toolResult   // "✅ Found 3 events" — what happened.
         case system
     }
 }
 
-// MARK: - Model Discovery Helper
+// MARK: - Model Discovery
 
-/// Utility to find .litertlm model files in the app's Documents directory.
-///
-/// For development, you copy the model to the device via Xcode's
-/// "Devices and Simulators" window or via the Files app (if document
-/// sharing is enabled in Info.plist). For production, you'd download
-/// from HuggingFace or Firebase on first launch.
 struct ModelDiscovery {
     
-    /// Returns the path to the first .litertlm file found in Documents,
-    /// or nil if no model is available.
     static func findModel() -> String? {
         let docs = FileManager.default.urls(
             for: .documentDirectory,
@@ -447,7 +486,6 @@ struct ModelDiscovery {
             .path
     }
     
-    /// Returns all .litertlm files in Documents, for a model picker UI.
     static func findAllModels() -> [(name: String, path: String)] {
         let docs = FileManager.default.urls(
             for: .documentDirectory,

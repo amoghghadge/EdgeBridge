@@ -8,16 +8,14 @@
 import Foundation
 
 // ============================================================================
-// ChatView.swift  (v2 — Real LiteRT-LM Integration)
+// ChatView.swift  (v3 — Agentic Calendar Assistant)
 //
-// Updated to work with EngineViewModel v4 (C bridge API) instead of the
-// old C++ stub. Key changes from v1:
-//
-// 1. Model discovery: scans the app's Documents directory for .litertlm
-//    files and presents a picker if multiple are found.
-// 2. Status bar: shows engine loading state, model name, and errors.
-// 3. Streaming support: assistant messages update live as tokens arrive.
-// 4. Cleanup on disappear: properly frees C++ engine resources.
+// Updated to support the agentic tool-calling loop. Key additions:
+//   - Tool call messages shown as action cards (distinct from chat bubbles)
+//   - Tool result messages shown as compact status cards
+//   - Calendar agent mode toggle in the header
+//   - Model name display
+//   - Info.plist must include NSCalendarsFullAccessUsageDescription for EventKit
 // ============================================================================
 
 import SwiftUI
@@ -33,70 +31,12 @@ struct ChatView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // -- Header with backend toggle --
             headerBar
-            
             Divider()
-            
-            // -- Status bar (model loading, errors) --
             statusBar
-            
-            // -- Benchmark bar --
-            if !viewModel.benchmarkText.isEmpty {
-                Text(viewModel.benchmarkText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal)
-                    .padding(.vertical, 4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.systemGray6))
-            }
-            
-            // -- Message list --
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(viewModel.messages) { message in
-                            MessageBubble(message: message)
-                                .id(message.id)
-                        }
-                        
-                        if viewModel.isGenerating {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                Text("Generating...")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal)
-                        }
-                        
-                        // Invisible anchor for auto-scrolling.
-                        Color.clear
-                            .frame(height: 1)
-                            .id("bottom")
-                    }
-                    .padding()
-                }
-                .onTapGesture {
-                    isInputFocused = false
-                }
-                .onChange(of: viewModel.messages.count) { _, _ in
-                    withAnimation {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
-                }
-                // Also scroll when the last message's content changes
-                // (streaming updates).
-                .onChange(of: viewModel.messages.last?.content ?? "") { _, _ in
-                    proxy.scrollTo("bottom", anchor: .bottom)
-                }
-            }
-            
+            benchmarkBar
+            messageList
             Divider()
-            
-            // -- Input bar --
             inputBar
         }
         .onAppear {
@@ -110,12 +50,19 @@ struct ChatView: View {
         }
     }
     
-    // MARK: - Subviews
+    // MARK: - Header
     
     private var headerBar: some View {
         HStack {
-            Text("EdgeBridge")
-                .font(.headline)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("EdgeBridge")
+                    .font(.headline)
+                if !viewModel.currentModelName.isEmpty {
+                    Text(viewModel.currentModelName)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
             
             Spacer()
             
@@ -136,27 +83,36 @@ struct ChatView: View {
                     viewModel.toggleBackend(useGPU: newValue)
                 }
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.vertical, 8)
     }
+    
+    // MARK: - Status Bar
     
     private var statusBar: some View {
         HStack(spacing: 8) {
+            // Loading spinner.
             if !viewModel.isEngineReady && viewModel.statusMessage.contains("Loading") {
                 ProgressView()
                     .scaleEffect(0.6)
             }
             
+            // Calendar agent indicator.
+            if viewModel.toolCallingEnabled && viewModel.isEngineReady {
+                Image(systemName: "calendar.badge.checkmark")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+            
             Text(viewModel.statusMessage)
                 .font(.caption)
                 .foregroundStyle(
-                    viewModel.statusMessage.contains("Failed")
-                        ? .red
-                        : .secondary
+                    viewModel.statusMessage.contains("Failed") ? .red : .secondary
                 )
             
             Spacer()
             
-            // Model selector button — tap to pick a different model.
+            // Model selector button.
             Button(action: {
                 availableModels = ModelDiscovery.findAllModels()
                 if availableModels.count > 1 {
@@ -166,20 +122,80 @@ struct ChatView: View {
                 Image(systemName: "doc.badge.gearshape")
                     .font(.caption)
             }
-            .disabled(!viewModel.isEngineReady && !viewModel.statusMessage.contains("Failed"))
         }
         .padding(.horizontal)
         .padding(.vertical, 4)
         .background(Color(.systemGray6))
     }
     
+    // MARK: - Benchmark Bar
+    
+    @ViewBuilder
+    private var benchmarkBar: some View {
+        if !viewModel.benchmarkText.isEmpty {
+            Text(viewModel.benchmarkText)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.systemGray6).opacity(0.5))
+        }
+    }
+    
+    // MARK: - Message List
+    
+    private var messageList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    ForEach(viewModel.messages) { message in
+                        MessageRow(message: message)
+                            .id(message.id)
+                    }
+                    
+                    if viewModel.isGenerating {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Thinking...")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal)
+                    }
+                    
+                    Color.clear
+                        .frame(height: 1)
+                        .id("bottom")
+                }
+                .padding()
+            }
+            .onTapGesture {
+                isInputFocused = false
+            }
+            .onChange(of: viewModel.messages.count) { _, _ in
+                withAnimation {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Input Bar
+    
     private var inputBar: some View {
         HStack(spacing: 12) {
-            TextField("Ask something...", text: $inputText)
-                .textFieldStyle(.plain)
-                .focused($isInputFocused)
-                .onSubmit { send() }
-                .disabled(!viewModel.isEngineReady)
+            TextField(
+                viewModel.toolCallingEnabled
+                    ? "Ask about your schedule..."
+                    : "Ask something...",
+                text: $inputText
+            )
+            .textFieldStyle(.plain)
+            .focused($isInputFocused)
+            .onSubmit { send() }
+            .disabled(!viewModel.isEngineReady)
             
             Button(action: send) {
                 Image(systemName: "arrow.up.circle.fill")
@@ -197,6 +213,8 @@ struct ChatView: View {
         }
         .padding()
     }
+    
+    // MARK: - Model Picker
     
     private var modelPickerSheet: some View {
         NavigationStack {
@@ -236,8 +254,6 @@ struct ChatView: View {
         viewModel.sendMessage(text)
     }
     
-    /// Scans the Documents directory for .litertlm files and loads the
-    /// first one found. If no models are found, shows instructions.
     private func discoverAndLoadModel() {
         if let modelPath = ModelDiscovery.findModel() {
             viewModel.initialize(modelPath: modelPath, useGPU: useGPU)
@@ -248,48 +264,118 @@ struct ChatView: View {
     }
 }
 
-// MARK: - MessageBubble
+// MARK: - MessageRow
 
-struct MessageBubble: View {
+/// Routes each message to the appropriate visual component based on role.
+struct MessageRow: View {
     let message: ChatMessage
     
     var body: some View {
+        switch message.role {
+        case .user:
+            UserBubble(content: message.content)
+        case .assistant:
+            AssistantBubble(content: message.content)
+        case .toolCall:
+            ToolActionCard(content: message.content, isResult: false)
+        case .toolResult:
+            ToolActionCard(content: message.content, isResult: true)
+        case .system:
+            SystemMessage(content: message.content)
+        }
+    }
+}
+
+// MARK: - User Bubble
+
+struct UserBubble: View {
+    let content: String
+    
+    var body: some View {
         HStack {
-            if message.role == .user { Spacer(minLength: 60) }
-            
-            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
-                Text(roleLabel)
+            Spacer(minLength: 60)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("You")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                
-                Text(message.content)
+                Text(content)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(bubbleColor)
-                    .foregroundStyle(message.role == .user ? .white : .primary)
+                    .background(Color.blue)
+                    .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
             }
+        }
+    }
+}
+
+// MARK: - Assistant Bubble
+
+struct AssistantBubble: View {
+    let content: String
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("EdgeBridge")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(content)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray5))
+                    .foregroundStyle(.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+            Spacer(minLength: 60)
+        }
+    }
+}
+
+// MARK: - Tool Action Card
+
+/// Displays tool calls and results as compact, visually distinct cards.
+/// Tool calls show what the model is doing (e.g., "📅 Checking schedule...").
+/// Tool results show the outcome (e.g., "✅ Found 3 events").
+struct ToolActionCard: View {
+    let content: String
+    let isResult: Bool
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            // Accent bar on the left edge.
+            RoundedRectangle(cornerRadius: 2)
+                .fill(isResult ? Color.green : Color.orange)
+                .frame(width: 3)
             
-            if message.role != .user { Spacer(minLength: 60) }
+            Text(content)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            
+            Spacer()
         }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(.systemGray6).opacity(0.7))
+        )
+        .padding(.horizontal, 4)
     }
+}
+
+// MARK: - System Message
+
+struct SystemMessage: View {
+    let content: String
     
-    private var roleLabel: String {
-        switch message.role {
-        case .user: return "You"
-        case .assistant: return "EdgeBridge"
-        case .toolResult: return "Tool Result"
-        case .system: return "System"
-        }
-    }
-    
-    private var bubbleColor: Color {
-        switch message.role {
-        case .user: return .blue
-        case .assistant: return Color(.systemGray5)
-        case .toolResult: return Color(.systemGreen).opacity(0.2)
-        case .system: return Color(.systemOrange).opacity(0.2)
-        }
+    var body: some View {
+        Text(content)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .italic()
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 4)
     }
 }
 
