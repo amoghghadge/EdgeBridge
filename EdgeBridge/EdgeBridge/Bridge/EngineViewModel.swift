@@ -279,23 +279,32 @@ class EngineViewModel {
     /// Shows a user-friendly description of what the model is doing.
     private func formatToolCallDisplay(_ toolCall: ToolCall) -> String {
         switch toolCall.name {
-        case "get_todays_events":
-            return "📅 Checking today's schedule..."
-        case "get_events_for_date":
-            let date = toolCall.arguments["date"] as? String ?? "unknown date"
+        case "get_events", "get_todays_events", "get_events_for_date":
+            let date = toolCall.arguments["date"] as? String ?? "today"
             return "📅 Checking schedule for \(date)..."
+        case "get_week_events":
+            let start = toolCall.arguments["start_date"] as? String ?? "this week"
+            return "📅 Getting weekly schedule from \(start)..."
         case "find_free_slots":
-            let date = toolCall.arguments["date"] as? String ?? "unknown date"
-            let duration = toolCall.arguments["duration_minutes"] as? Int ?? 0
+            let date = toolCall.arguments["date"] as? String ?? "today"
+            let duration = toolCall.arguments["duration_minutes"] as? Int ?? 60
             return "🔍 Finding \(duration)-minute free slots on \(date)..."
         case "create_event":
             let title = toolCall.arguments["title"] as? String ?? "New Event"
             return "➕ Creating event: \(title)..."
+        case "modify_event":
+            let newTitle = toolCall.arguments["new_title"] as? String
+            return "✏️ Modifying event\(newTitle.map { ": \($0)" } ?? "")..."
         case "delete_event":
             return "🗑️ Deleting event..."
         case "get_upcoming_events":
             let count = toolCall.arguments["count"] as? Int ?? 5
             return "📋 Getting next \(count) upcoming events..."
+        case "search_events":
+            let query = toolCall.arguments["query"] as? String ?? ""
+            return "🔎 Searching for '\(query)'..."
+        case "check_conflicts":
+            return "⚠️ Checking for scheduling conflicts..."
         default:
             return "🔧 Calling \(toolCall.name)..."
         }
@@ -304,7 +313,6 @@ class EngineViewModel {
     /// Formats a tool result for display in the chat UI.
     /// Provides a brief summary rather than showing raw JSON.
     private func formatToolResultDisplay(_ toolName: String, result: String) -> String {
-        // Parse the result JSON to extract key info.
         guard let data = result.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
@@ -316,18 +324,32 @@ class EngineViewModel {
         }
         
         switch toolName {
-        case "get_todays_events", "get_events_for_date", "get_upcoming_events":
+        case "get_events", "get_todays_events", "get_events_for_date", "get_upcoming_events":
             let count = json["event_count"] as? Int ?? json["count_returned"] as? Int ?? 0
-            return "✅ Found \(count) event\(count == 1 ? "" : "s")"
+            let date = json["date"] as? String ?? json["day_of_week"] as? String ?? ""
+            return "✅ Found \(count) event\(count == 1 ? "" : "s")\(date.isEmpty ? "" : " on \(date)")"
+        case "get_week_events":
+            let total = json["total_events"] as? Int ?? 0
+            let days = json["days_with_events"] as? Int ?? 0
+            return "✅ Found \(total) events across \(days) days"
         case "find_free_slots":
             let count = json["free_slots_count"] as? Int ?? 0
             return "✅ Found \(count) available slot\(count == 1 ? "" : "s")"
         case "create_event":
             let title = json["title"] as? String ?? "Event"
             return "✅ Created: \(title)"
+        case "modify_event":
+            return "✅ Event updated"
         case "delete_event":
             let title = json["deleted_title"] as? String ?? "Event"
             return "✅ Deleted: \(title)"
+        case "search_events":
+            let count = json["match_count"] as? Int ?? 0
+            return "✅ Found \(count) matching event\(count == 1 ? "" : "s")"
+        case "check_conflicts":
+            let hasConflicts = json["has_conflicts"] as? Bool ?? false
+            let count = json["conflict_count"] as? Int ?? 0
+            return hasConflicts ? "⚠️ \(count) conflict\(count == 1 ? "" : "s") found" : "✅ No conflicts"
         default:
             return "✅ Done"
         }
