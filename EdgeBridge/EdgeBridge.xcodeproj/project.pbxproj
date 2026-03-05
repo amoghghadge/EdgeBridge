@@ -6,13 +6,60 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		CA60EE0C2F58FC9900D50066 /* libLiteRTLM.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EE0B2F58FB6D00D50066 /* libLiteRTLM.a */; };
+		CA60EE112F58FF0200D50066 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EE102F58FF0200D50066 /* Accelerate.framework */; };
+		CA60EE132F58FF0B00D50066 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EE122F58FF0B00D50066 /* Metal.framework */; };
+		CA60EE152F58FF1200D50066 /* MetalPerformanceShaders.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EE142F58FF1200D50066 /* MetalPerformanceShaders.framework */; };
+		CA60EE172F58FF1A00D50066 /* CoreML.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EE162F58FF1A00D50066 /* CoreML.framework */; };
+		CA60EE1B2F59042D00D50066 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EE1A2F59042D00D50066 /* AVFoundation.framework */; };
+		CA60EE1D2F59043500D50066 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EE1C2F59043500D50066 /* AudioToolbox.framework */; };
+		CA60EE1F2F59129900D50066 /* libGemmaModelConstraintProvider.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EE1E2F59129900D50066 /* libGemmaModelConstraintProvider.dylib */; };
+		CA60EE202F59129900D50066 /* libGemmaModelConstraintProvider.dylib in Embed Libraries */ = {isa = PBXBuildFile; fileRef = CA60EE1E2F59129900D50066 /* libGemmaModelConstraintProvider.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		CA60EE212F59129900D50066 /* Embed Libraries */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				CA60EE202F59129900D50066 /* libGemmaModelConstraintProvider.dylib in Embed Libraries */,
+			);
+			name = "Embed Libraries";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		CA60EDEF2F57FF4300D50066 /* EdgeBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EdgeBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CA60EE0B2F58FB6D00D50066 /* libLiteRTLM.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libLiteRTLM.a; path = Libs/libLiteRTLM.a; sourceTree = "<group>"; };
+		CA60EE102F58FF0200D50066 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		CA60EE122F58FF0B00D50066 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		CA60EE142F58FF1200D50066 /* MetalPerformanceShaders.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalPerformanceShaders.framework; path = System/Library/Frameworks/MetalPerformanceShaders.framework; sourceTree = SDKROOT; };
+		CA60EE162F58FF1A00D50066 /* CoreML.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreML.framework; path = System/Library/Frameworks/CoreML.framework; sourceTree = SDKROOT; };
+		CA60EE1A2F59042D00D50066 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		CA60EE1C2F59043500D50066 /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
+		CA60EE1E2F59129900D50066 /* libGemmaModelConstraintProvider.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libGemmaModelConstraintProvider.dylib; path = Libs/libGemmaModelConstraintProvider.dylib; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		CA60EE192F58FFB400D50066 /* Exceptions for "EdgeBridge" folder in "EdgeBridge" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CA60EDEE2F57FF4300D50066 /* EdgeBridge */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		CA60EDF12F57FF4300D50066 /* EdgeBridge */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				CA60EE192F58FFB400D50066 /* Exceptions for "EdgeBridge" folder in "EdgeBridge" target */,
+			);
 			path = EdgeBridge;
 			sourceTree = "<group>";
 		};
@@ -23,6 +70,14 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CA60EE152F58FF1200D50066 /* MetalPerformanceShaders.framework in Frameworks */,
+				CA60EE0C2F58FC9900D50066 /* libLiteRTLM.a in Frameworks */,
+				CA60EE1B2F59042D00D50066 /* AVFoundation.framework in Frameworks */,
+				CA60EE172F58FF1A00D50066 /* CoreML.framework in Frameworks */,
+				CA60EE1D2F59043500D50066 /* AudioToolbox.framework in Frameworks */,
+				CA60EE132F58FF0B00D50066 /* Metal.framework in Frameworks */,
+				CA60EE1F2F59129900D50066 /* libGemmaModelConstraintProvider.dylib in Frameworks */,
+				CA60EE112F58FF0200D50066 /* Accelerate.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -33,6 +88,7 @@
 			isa = PBXGroup;
 			children = (
 				CA60EDF12F57FF4300D50066 /* EdgeBridge */,
+				CA60EE0A2F58FB6D00D50066 /* Frameworks */,
 				CA60EDF02F57FF4300D50066 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -45,6 +101,21 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		CA60EE0A2F58FB6D00D50066 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				CA60EE1E2F59129900D50066 /* libGemmaModelConstraintProvider.dylib */,
+				CA60EE1C2F59043500D50066 /* AudioToolbox.framework */,
+				CA60EE1A2F59042D00D50066 /* AVFoundation.framework */,
+				CA60EE162F58FF1A00D50066 /* CoreML.framework */,
+				CA60EE142F58FF1200D50066 /* MetalPerformanceShaders.framework */,
+				CA60EE122F58FF0B00D50066 /* Metal.framework */,
+				CA60EE102F58FF0200D50066 /* Accelerate.framework */,
+				CA60EE0B2F58FB6D00D50066 /* libLiteRTLM.a */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -55,6 +126,7 @@
 				CA60EDEB2F57FF4300D50066 /* Sources */,
 				CA60EDEC2F57FF4300D50066 /* Frameworks */,
 				CA60EDED2F57FF4300D50066 /* Resources */,
+				CA60EE212F59129900D50066 /* Embed Libraries */,
 			);
 			buildRules = (
 			);
@@ -256,6 +328,9 @@
 				DEVELOPMENT_TEAM = R66MJNV8T6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/Libs/**";
+				INFOPLIST_FILE = EdgeBridge/Info.plist;
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -265,7 +340,17 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Libs",
+				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-lc++",
+					"-lz",
+					"-force_load",
+					"$(PROJECT_DIR)/Libs/libLiteRTLM.a",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.amoghghadge.EdgeBridge;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -273,7 +358,8 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/EdgeBridge/Bridge";
-				SWIFT_OBJC_INTEROP_MODE = objcxx;
+				SWIFT_OBJC_BRIDGING_HEADER = "EdgeBridge/EdgeBridge-Bridging-Header.h";
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
@@ -292,6 +378,9 @@
 				DEVELOPMENT_TEAM = R66MJNV8T6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/Libs/**";
+				INFOPLIST_FILE = EdgeBridge/Info.plist;
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -301,7 +390,17 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Libs",
+				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-lc++",
+					"-lz",
+					"-force_load",
+					"$(PROJECT_DIR)/Libs/libLiteRTLM.a",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.amoghghadge.EdgeBridge;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -309,7 +408,8 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/EdgeBridge/Bridge";
-				SWIFT_OBJC_INTEROP_MODE = objcxx;
+				SWIFT_OBJC_BRIDGING_HEADER = "EdgeBridge/EdgeBridge-Bridging-Header.h";
+				SWIFT_OBJC_INTEROP_MODE = objc;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
