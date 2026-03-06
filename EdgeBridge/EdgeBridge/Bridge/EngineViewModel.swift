@@ -106,7 +106,7 @@ class EngineViewModel {
                 // Pass the calendar tools JSON and system prompt.
                 convStatus = litert_conversation_create(
                     engine,
-                    ToolDeclarations.calendarSystemPrompt,
+                    ToolDeclarations.getDynamicSystemPrompt(),
                     ToolDeclarations.calendarToolsJSON,
                     &conversation
                 )
@@ -395,7 +395,7 @@ class EngineViewModel {
             if self.toolCallingEnabled {
                 convStatus = litert_conversation_create(
                     engine,
-                    ToolDeclarations.calendarSystemPrompt,
+                    ToolDeclarations.getDynamicSystemPrompt(),
                     ToolDeclarations.calendarToolsJSON,
                     &conversation
                 )

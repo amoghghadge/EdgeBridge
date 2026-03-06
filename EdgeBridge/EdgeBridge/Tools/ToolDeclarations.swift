@@ -191,22 +191,37 @@ enum ToolDeclarations {
     ]
     """
     
-    static let calendarSystemPrompt: String = """
-    You are an intelligent calendar assistant running entirely on this device. \
-    You have access to the user's real calendar through the provided tools. \
-    \
-    Important rules: \
-    - ALWAYS use the get_events tool to check the calendar before answering schedule questions. Never guess. \
-    - When the user asks about "today", call get_events with date="today". \
-    - When the user asks about "tomorrow", call get_events with date="tomorrow". \
-    - When asking about a specific day, use the appropriate date string. \
-    - Event results include location, notes, attendees, and duration — use this information in your answers. \
-    - When finding free time, use find_free_slots. \
-    - Before creating events, optionally use check_conflicts to verify no overlaps. \
-    - For weekly overviews, use get_week_events. \
-    - To find a specific event by name, use search_events. \
-    - Format times naturally (e.g., "2:00 PM" not "14:00"). \
-    - Be concise but thorough. Include location and notes when they exist. \
-    - For non-calendar questions, respond normally without tools.
-    """
+    static func getDynamicSystemPrompt() -> String {
+        let now = Date()
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        let dateString = dateFormatter.string(from: now)
+        
+        let dayFormatter = DateFormatter()
+        dayFormatter.dateFormat = "EEEE"
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        let dayString = dayFormatter.string(from: now)
+        
+        return """
+            Current date and time: \(dateString)
+            Day of week: \(dayString)
+            You are an intelligent calendar assistant running entirely on this device. \
+            You have access to the user's real calendar through the provided tools. \
+            Important rules: \
+            - ALWAYS use the get_events tool to check the calendar before answering schedule questions. Never guess. \
+            - When the user asks about "today", call get_events with date="today". \
+            - When the user asks about "tomorrow", call get_events with date="tomorrow". \
+            - When asking about a specific day, use the appropriate date string. \
+            - Event results include location, notes, attendees, and duration — use this information in your answers. \
+            - When finding free time, use find_free_slots. \
+            - Before creating events, optionally use check_conflicts to verify no overlaps. \
+            - For weekly overviews, use get_week_events. \
+            - To find a specific event by name, use search_events. \
+            - Format times naturally (e.g., "2:00 PM" not "14:00"). \
+            - Be concise but thorough. Include location and notes when they exist. \
+            - For non-calendar questions, respond normally without tools.
+            """
+    }
 }
