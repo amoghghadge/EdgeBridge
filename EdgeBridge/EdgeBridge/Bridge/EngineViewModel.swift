@@ -491,36 +491,37 @@ struct ChatMessage: Identifiable {
 // MARK: - Model Discovery
 
 struct ModelDiscovery {
+    private static let lastUsedModelKey = "LastUsedModelName"
     
     static func findModel() -> String? {
-        let docs = FileManager.default.urls(
-            for: .documentDirectory,
-            in: .userDomainMask
-        ).first!
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let contents = (try? FileManager.default.contentsOfDirectory(at: docs, includingPropertiesForKeys: nil)) ?? []
         
-        let contents = (try? FileManager.default.contentsOfDirectory(
-            at: docs,
-            includingPropertiesForKeys: nil
-        )) ?? []
+        let allModels = contents.filter { $0.pathExtension == "litertlm" }
+        guard !allModels.isEmpty else { return nil }
         
-        return contents
-            .first(where: { $0.pathExtension == "litertlm" })?
-            .path
+        // 1. Try to load the last used model from UserDefaults
+        if let lastModelName = UserDefaults.standard.string(forKey: lastUsedModelKey),
+           let matchedModel = allModels.first(where: { $0.lastPathComponent == lastModelName }) {
+            return matchedModel.path
+        }
+        
+        // 2. Fallback to the first available model if no preference is saved
+        return allModels.first?.path
     }
     
     static func findAllModels() -> [(name: String, path: String)] {
-        let docs = FileManager.default.urls(
-            for: .documentDirectory,
-            in: .userDomainMask
-        ).first!
-        
-        let contents = (try? FileManager.default.contentsOfDirectory(
-            at: docs,
-            includingPropertiesForKeys: nil
-        )) ?? []
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let contents = (try? FileManager.default.contentsOfDirectory(at: docs, includingPropertiesForKeys: nil)) ?? []
         
         return contents
             .filter { $0.pathExtension == "litertlm" }
             .map { (name: $0.deletingPathExtension().lastPathComponent, path: $0.path) }
+            .sorted { $0.name < $1.name } // Alphabetical sorting for the UI
+    }
+    
+    static func saveLastUsedModel(path: String) {
+        let url = URL(fileURLWithPath: path)
+        UserDefaults.standard.set(url.lastPathComponent, forKey: lastUsedModelKey)
     }
 }

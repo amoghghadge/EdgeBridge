@@ -222,6 +222,10 @@ struct ChatView: View {
                 Button(action: {
                     showModelPicker = false
                     viewModel.cleanup()
+                    
+                    // Save the user's choice so it loads automatically next time!
+                    ModelDiscovery.saveLastUsedModel(path: model.path)
+                    
                     viewModel.initialize(modelPath: model.path, useGPU: useGPU)
                 }) {
                     VStack(alignment: .leading) {
