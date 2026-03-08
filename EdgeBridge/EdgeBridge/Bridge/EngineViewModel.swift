@@ -60,7 +60,7 @@ class EngineViewModel {
     
     // Maximum number of tool-call rounds per user message to prevent
     // infinite loops if the model keeps producing tool calls.
-    private let maxToolRounds = 5
+    private let maxToolRounds = 100
     
     // MARK: - Initialization
     

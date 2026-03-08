@@ -1,14 +1,8 @@
 """
 generate_calendar_dataset.py
 
-Generates a JSONL training dataset for fine-tuning FunctionGemma-270M
-on multi-step calendar tool-calling operations with dynamic temporal grounding.
-
-Each example contains:
-  - tools: The calendar function schemas
-  - messages: A conversation with a dynamically generated system prompt, 
-    user query, and the expected assistant response (including tool_calls 
-    and tool results mapped to the simulated current date).
+Generates a JSONL training dataset for fine-tuning Qwen2.5 on multi-step 
+calendar tool-calling operations with dynamic temporal grounding.
 
 Usage:
   python generate_calendar_dataset.py
@@ -23,7 +17,7 @@ def tool_msg(name, content):
     return {"role": "tool", "name": name, "content": content}
 
 # ============================================================================
-# Calendar Tool Schemas
+# Calendar Tool Schemas (1:1 Parity with ToolDeclarations.swift)
 # ============================================================================
 
 CALENDAR_TOOLS = [
@@ -31,13 +25,13 @@ CALENDAR_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_events",
-            "description": "Returns all calendar events on a specific date, including titles, times, locations, notes, and attendees.",
+            "description": "Returns all calendar events on a specific date, including their titles, times, locations, notes, and attendees. Accepts 'today', 'tomorrow', 'yesterday', 'next monday', or a specific date in YYYY-MM-DD format. ALWAYS use this tool when the user asks about their schedule on any day. The results include full event details like location and notes.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "date": {
                         "type": "string",
-                        "description": "The date to check. Accepts: 'today', 'tomorrow', 'yesterday', or YYYY-MM-DD format."
+                        "description": "The date to check. Accepts: 'today', 'tomorrow', 'yesterday', 'next monday' through 'next sunday', or YYYY-MM-DD format. Defaults to 'today' if not specified."
                     }
                 },
                 "required": ["date"]
@@ -48,13 +42,13 @@ CALENDAR_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_week_events",
-            "description": "Returns a weekly overview of all calendar events grouped by day.",
+            "description": "Returns a weekly overview of all calendar events, grouped by day. Use this when the user asks about their week, weekly schedule, or wants to see multiple days at once.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "start_date": {
                         "type": "string",
-                        "description": "The first day of the week to show. Defaults to 'today'."
+                        "description": "The first day of the week to show. Accepts 'today', 'tomorrow', 'next monday', or YYYY-MM-DD. Defaults to 'today'."
                     }
                 },
                 "required": ["start_date"]
@@ -65,17 +59,17 @@ CALENDAR_TOOLS = [
         "type": "function",
         "function": {
             "name": "find_free_slots",
-            "description": "Finds available time slots of a given duration on a specific date between 8 AM and 8 PM.",
+            "description": "Finds available time slots of a given duration on a specific date, between 8:00 AM and 8:00 PM. Use this when the user wants to know when they're free, asks about availability, or wants to find time for a meeting.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "date": {
                         "type": "string",
-                        "description": "The date to search for free slots."
+                        "description": "The date to search for free slots. Accepts 'today', 'tomorrow', or YYYY-MM-DD."
                     },
                     "duration_minutes": {
                         "type": "integer",
-                        "description": "Minimum duration in minutes needed for the free slot."
+                        "description": "The minimum duration in minutes needed (e.g., 30, 60, 90, 120)."
                     }
                 },
                 "required": ["date", "duration_minutes"]
@@ -86,16 +80,34 @@ CALENDAR_TOOLS = [
         "type": "function",
         "function": {
             "name": "create_event",
-            "description": "Creates a new event on the user's calendar.",
+            "description": "Creates a new event on the user's calendar. Use this when the user explicitly asks to schedule, book, or create an event. You can include a location and notes.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "The title of the event."},
-                    "start_time": {"type": "string", "description": "Start time in YYYY-MM-DDTHH:MM format."},
-                    "end_time": {"type": "string", "description": "End time in YYYY-MM-DDTHH:MM format."},
-                    "location": {"type": "string", "description": "Optional location."},
-                    "notes": {"type": "string", "description": "Optional notes."},
-                    "calendar_name": {"type": "string", "description": "Optional calendar name."}
+                    "title": {
+                        "type": "string", 
+                        "description": "The title of the event."
+                    },
+                    "start_time": {
+                        "type": "string", 
+                        "description": "Start time in YYYY-MM-DDTHH:MM format (e.g., 2026-03-06T14:00)."
+                    },
+                    "end_time": {
+                        "type": "string", 
+                        "description": "End time in YYYY-MM-DDTHH:MM format (e.g., 2026-03-06T15:00)."
+                    },
+                    "location": {
+                        "type": "string", 
+                        "description": "Optional: the location for the event."
+                    },
+                    "notes": {
+                        "type": "string", 
+                        "description": "Optional: notes or description for the event."
+                    },
+                    "calendar_name": {
+                        "type": "string", 
+                        "description": "Optional: specific calendar to add to. Uses default if omitted."
+                    }
                 },
                 "required": ["title", "start_time", "end_time"]
             }
@@ -105,15 +117,30 @@ CALENDAR_TOOLS = [
         "type": "function",
         "function": {
             "name": "modify_event",
-            "description": "Modifies an existing calendar event. Can change title, time, or location.",
+            "description": "Modifies an existing calendar event. Can change the title, time, or location. Use this when the user wants to reschedule, rename, or update an event. You need the event_id from a previous get_events or search_events call.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "event_id": {"type": "string", "description": "The event ID to modify."},
-                    "new_title": {"type": "string", "description": "Optional new title."},
-                    "new_start_time": {"type": "string", "description": "Optional new start time."},
-                    "new_end_time": {"type": "string", "description": "Optional new end time."},
-                    "new_location": {"type": "string", "description": "Optional new location."}
+                    "event_id": {
+                        "type": "string", 
+                        "description": "The unique identifier of the event to modify (from get_events results)."
+                    },
+                    "new_title": {
+                        "type": "string", 
+                        "description": "Optional: new title for the event."
+                    },
+                    "new_start_time": {
+                        "type": "string", 
+                        "description": "Optional: new start time in YYYY-MM-DDTHH:MM format."
+                    },
+                    "new_end_time": {
+                        "type": "string", 
+                        "description": "Optional: new end time in YYYY-MM-DDTHH:MM format."
+                    },
+                    "new_location": {
+                        "type": "string", 
+                        "description": "Optional: new location for the event."
+                    }
                 },
                 "required": ["event_id"]
             }
@@ -123,11 +150,14 @@ CALENDAR_TOOLS = [
         "type": "function",
         "function": {
             "name": "delete_event",
-            "description": "Deletes a calendar event by ID.",
+            "description": "Deletes a calendar event. Only use when the user explicitly asks to remove or cancel an event. Requires the event_id from a previous query. Always confirm with the user before deleting.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "event_id": {"type": "string", "description": "The event ID to delete."}
+                    "event_id": {
+                        "type": "string", 
+                        "description": "The unique identifier of the event to delete."
+                    }
                 },
                 "required": ["event_id"]
             }
@@ -137,12 +167,18 @@ CALENDAR_TOOLS = [
         "type": "function",
         "function": {
             "name": "search_events",
-            "description": "Searches for events by keyword in title, location, or notes.",
+            "description": "Searches for calendar events by keyword in the title, location, or notes. Searches across the next N days. Use this when the user asks about a specific event by name or topic.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Search keyword."},
-                    "days_ahead": {"type": "integer", "description": "How many days ahead to search."}
+                    "query": {
+                        "type": "string", 
+                        "description": "The search keyword to look for in event titles, locations, and notes."
+                    },
+                    "days_ahead": {
+                        "type": "integer", 
+                        "description": "How many days ahead to search (default: 30)."
+                    }
                 },
                 "required": ["query"]
             }
@@ -152,12 +188,18 @@ CALENDAR_TOOLS = [
         "type": "function",
         "function": {
             "name": "check_conflicts",
-            "description": "Checks if a proposed time slot conflicts with existing events.",
+            "description": "Checks if a proposed time slot conflicts with any existing events. Use this before creating an event to ensure there are no scheduling overlaps.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "start_time": {"type": "string", "description": "Proposed start time."},
-                    "end_time": {"type": "string", "description": "Proposed end time."}
+                    "start_time": {
+                        "type": "string", 
+                        "description": "Proposed start time in YYYY-MM-DDTHH:MM format."
+                    },
+                    "end_time": {
+                        "type": "string", 
+                        "description": "Proposed end time in YYYY-MM-DDTHH:MM format."
+                    }
                 },
                 "required": ["start_time", "end_time"]
             }
@@ -209,22 +251,34 @@ def random_simulated_datetime():
     random_minutes = random.randint(0, 59)
     return start + timedelta(days=random_days, hours=random_hours, minutes=random_minutes)
 
-def get_system_prompt(simulated_now, extra_instructions=""):
-    """Dynamically builds the system prompt with temporal grounding."""
+def get_system_prompt(simulated_now):
+    """Dynamically builds the system prompt with temporal grounding. MATCHES SWIFT EXACTLY."""
     base_prompt = (
         f"Current date and time: {simulated_now.strftime('%Y-%m-%dT%H:%M:%S')}\n"
         f"Day of week: {simulated_now.strftime('%A')}\n"
-        f"You are an intelligent calendar assistant. Use the provided tools to help manage the user's schedule."
+        "You are an intelligent calendar assistant running entirely on this device. "
+        "You have access to the user's real calendar through the provided tools. "
+        "Important rules: "
+        "- ALWAYS use the get_events tool to check the calendar before answering schedule questions. Never guess. "
+        "- When the user asks about \"today\", call get_events with date=\"today\". "
+        "- When the user asks about \"tomorrow\", call get_events with date=\"tomorrow\". "
+        "- When asking about a specific day, use the appropriate date string. "
+        "- Event results include location, notes, attendees, and duration — use this information in your answers. "
+        "- When finding free time, use find_free_slots. "
+        "- Before creating events, optionally use check_conflicts to verify no overlaps. "
+        "- For weekly overviews, use get_week_events. "
+        "- To find a specific event by name, use search_events. "
+        "- Format times naturally (e.g., \"2:00 PM\" not \"14:00\"). "
+        "- Be concise but thorough. Include location and notes when they exist. "
+        "- For non-calendar questions, respond normally without tools."
     )
-    if extra_instructions:
-        base_prompt += f" {extra_instructions}"
     return base_prompt
 
 def format_date(dt):
     return dt.strftime("%Y-%m-%d")
 
 def format_time(dt):
-    return dt.strftime("%Y-%m-%dT%H:%M")
+    return dt.strftime("%-I:%M %p")
 
 def get_relative_date_word_and_dt(simulated_now):
     """Returns a tuple of (user_friendly_word, actual_datetime_object)."""
@@ -264,8 +318,8 @@ def random_event(target_dt, idx=0):
         "_end_dt": end,
     }
 
-def events_to_tool_result(events, tool_name="get_events", date_str="today"):
-    """Format events as a tool response JSON string."""
+def events_to_tool_result(events, tool_name="get_events", date_str="today", dt_obj=None):
+    """Format events as a tool response JSON string (Matching CalendarToolExecutor.swift)."""
     clean_events = []
     for e in events:
         d = {"title": e["title"], "start_time": e["start_time"],
@@ -278,12 +332,19 @@ def events_to_tool_result(events, tool_name="get_events", date_str="today"):
         d["duration_minutes"] = e["duration_minutes"]
         d["all_day"] = False
         clean_events.append(d)
-    return json.dumps({
+        
+    result_dict = {
         "tool_name": tool_name,
         "date": date_str,
         "event_count": len(clean_events),
         "events": clean_events
-    })
+    }
+    
+    # Matching Swift parity
+    if dt_obj:
+        result_dict["day_of_week"] = dt_obj.strftime("%A")
+        
+    return json.dumps(result_dict)
 
 # ============================================================================
 # Generators
@@ -304,7 +365,7 @@ def gen_single_get_events():
         f"Do I have anything planned {date_word}?",
     ]
     
-    tool_result = events_to_tool_result(events, "get_events", target_dt.strftime("%b %d, %Y"))
+    tool_result = events_to_tool_result(events, "get_events", target_dt.strftime("%b %d, %Y"), target_dt)
     
     if num_events == 0:
         assistant_text = f"You have no events scheduled for {date_word}. Your day is completely free!"
@@ -384,8 +445,11 @@ def gen_find_free_and_book():
     free_end = free_start + timedelta(minutes=duration + 60)
     
     free_slots_result = json.dumps({
-        "tool_name": "find_free_slots", "date": target_dt.strftime("%b %d, %Y"),
-        "duration_requested_minutes": duration, "free_slots_count": 1,
+        "tool_name": "find_free_slots", 
+        "date": target_dt.strftime("%b %d, %Y"),
+        "duration_requested_minutes": duration, 
+        "search_window": "8:00 AM - 8:00 PM", # Matching Swift parity
+        "free_slots_count": 1,
         "free_slots": [
             {"start": free_start.strftime("%I:%M %p"), "end": free_end.strftime("%I:%M %p"), "duration_minutes": str(duration + 60)}
         ]
@@ -428,14 +492,13 @@ def gen_duplicate_events():
     # Ensure target is different from source
     target_dt = source_dt + timedelta(days=random.randint(1, 4))
     
-    # Calculate if target is naturally tomorrow relative to sim_now
     if target_dt.date() == (simulated_now + timedelta(days=1)).date():
         target_word = "tomorrow"
     else:
         target_word = format_date(target_dt)
 
     events = [random_event(source_dt, i) for i in range(random.randint(1, 3))]
-    get_result = events_to_tool_result(events, "get_events", source_dt.strftime("%b %d, %Y"))
+    get_result = events_to_tool_result(events, "get_events", source_dt.strftime("%b %d, %Y"), source_dt)
     
     messages = [
         {"role": "system", "content": sys_prompt},
@@ -509,7 +572,7 @@ def gen_search_and_modify():
 
 def gen_check_conflicts_then_create():
     simulated_now = random_simulated_datetime()
-    sys_prompt = get_system_prompt(simulated_now, extra_instructions="Always check for conflicts before creating events.")
+    sys_prompt = get_system_prompt(simulated_now) 
     
     date_word, target_dt = get_relative_date_word_and_dt(simulated_now)
     title = random.choice(EVENT_TITLES)
@@ -586,6 +649,46 @@ def gen_reschedule_event():
         "metadata": random.choice(["train"] * 9 + ["eval"])
     }
 
+def gen_delete_event():
+    """Multi-step: search for an event, then delete it."""
+    simulated_now = random_simulated_datetime()
+    sys_prompt = get_system_prompt(simulated_now)
+    
+    _, target_dt = get_relative_date_word_and_dt(simulated_now)
+    event = random_event(target_dt, 0)
+    
+    search_result = json.dumps({
+        "tool_name": "search_events", "query": event["title"], "match_count": 1, "events": [{
+            "title": event["title"], "start_time": event["start_time"], "end_time": event["end_time"], 
+            "date": event["date"], "event_id": event["event_id"]
+        }]
+    })
+    
+    # Matching Swift's CalendarToolExecutor.deleteEvent output
+    delete_result = json.dumps({
+        "tool_name": "delete_event", 
+        "success": True, 
+        "deleted_title": event["title"]
+    })
+    
+    return {
+        "tools": CALENDAR_TOOLS,
+        "messages": [
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": f"Cancel my {event['title']} event."},
+            {"role": "assistant", "content": "", "tool_calls": [
+                {"type": "function", "function": {"name": "search_events", "arguments": {"query": event["title"]}}}
+            ]},
+            tool_msg("search_events", search_result),
+            {"role": "assistant", "content": "", "tool_calls": [
+                {"type": "function", "function": {"name": "delete_event", "arguments": {"event_id": event["event_id"]}}}
+            ]},
+            tool_msg("delete_event", delete_result),
+            {"role": "assistant", "content": f"I have successfully canceled and deleted \"{event['title']}\"."}
+        ],
+        "metadata": random.choice(["train"] * 9 + ["eval"])
+    }
+
 def gen_weekly_overview():
     simulated_now = random_simulated_datetime()
     sys_prompt = get_system_prompt(simulated_now)
@@ -602,7 +705,11 @@ def gen_weekly_overview():
                 {"type": "function", "function": {"name": "get_week_events", "arguments": {"start_date": "today"}}}
             ]},
             tool_msg("get_week_events", json.dumps({
-                "tool_name": "get_week_events", "total_events": 2,
+                "tool_name": "get_week_events", 
+                "start_date": day1.strftime("%b %-d, %Y"), # Matching Swift parity
+                "end_date": (day1 + timedelta(days=6)).strftime("%b %-d, %Y"), # Matching Swift parity
+                "total_events": 2,
+                "days_with_events": 2, 
                 "schedule": [
                     {"date": day1.strftime("%b %-d, %Y"), "day_of_week": day1.strftime("%A"), "events": [{"title": "CS 4501", "start_time": "11:00 AM", "end_time": "12:15 PM"}]},
                     {"date": day2.strftime("%b %-d, %Y"), "day_of_week": day2.strftime("%A"), "events": [{"title": "Lab Session", "start_time": "2:00 PM", "end_time": "3:30 PM"}]}
@@ -615,7 +722,7 @@ def gen_weekly_overview():
 
 def gen_no_tool_needed():
     simulated_now = random_simulated_datetime()
-    sys_prompt = get_system_prompt(simulated_now, extra_instructions="For non-calendar questions, respond helpfully without using tools.")
+    sys_prompt = get_system_prompt(simulated_now) 
     
     qa_pairs = [
         ("What's the weather like?", "I'm a calendar assistant, so I can't check the weather. But I can help you manage your schedule!"),
@@ -644,6 +751,7 @@ GENERATORS = [
     (gen_search_and_modify, 150),
     (gen_check_conflicts_then_create, 100),
     (gen_reschedule_event, 150),
+    (gen_delete_event, 100),
     (gen_weekly_overview, 80),
     (gen_no_tool_needed, 80),
 ]
