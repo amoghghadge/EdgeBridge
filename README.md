@@ -109,7 +109,7 @@ With the release of **Swift 5.9**, Apple introduced bidirectional C++ Interopera
 **Challenge 2: Bare-Metal Execution & Provisioning Profiles**
 
 **The Problem:** Because the custom LiteRT engine built in Phase 1 was compiled exclusively for the `arm64` architecture to accurately test memory limits, it could not be run on the Xcode iOS Simulator (which requires `x86_64` or simulator-specific binaries). Pushing the raw code to a physical iPhone 15 Pro resulted in an Apple security block: `Signing requires a development team`.
-**The Solution:** I configured a local Personal Team provisioning profile in Xcode to generate a free signing certificate. To bypass Apple's strict sandboxing for sideloaded apps, I manually enabled "Developer Mode" deep within the iOS Privacy & Security settings and established certificate trust, allowing the highly-optimized `arm64` binary to execute natively on the iPhone's silicon.
+**The Solution:** I configured a local Personal Team provisioning profile in Xcode to generate a free signing certificate. To bypass Apple's strict sandboxing for sideloaded apps, I manually enabled "Developer Mode" deep within the iOS Privacy & Security settings and established certificate trust, allowing the highly-optimized `arm64` binary to execute natively on the iPhone's silicon. 
 
 ### **Phase 2 Result**
 
