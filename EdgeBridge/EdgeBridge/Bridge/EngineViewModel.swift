@@ -132,8 +132,8 @@ class EngineViewModel {
                 self.isEngineReady = true
                 self.currentBackend = useGPU ? "GPU (Metal)" : "CPU (XNNPACK)"
                 self.statusMessage = self.toolCallingEnabled
-                    ? "Calendar assistant ready"
-                    : "Model loaded — ready to chat"
+                ? "Calendar assistant ready"
+                : "Model loaded — ready to chat"
             }
         }
     }
@@ -148,15 +148,23 @@ class EngineViewModel {
               let conversation = conversationHandle,
               isEngineReady else { return }
         
-        // Add the user's message to the chat.
-        let userMessage = ChatMessage(role: .user, content: text)
+        // Inject system context into the first user message.
+        var actualText = text
+        if messages.isEmpty && toolCallingEnabled {
+            let context = """
+            [Context: \(ToolDeclarations.getDynamicSystemPrompt())]
+            
+            """
+            actualText = context + text
+        }
+        
+        let userMessage = ChatMessage(role: .user, content: text) // Show clean text in UI
         messages.append(userMessage)
         isGenerating = true
         
         Task.detached { [self] in
-            // Send the user's message to the model.
             var responsePtr: UnsafePointer<CChar>?
-            let status = litert_conversation_send(conversation, text, &responsePtr)
+            let status = litert_conversation_send(conversation, actualText, &responsePtr)
             
             guard status == LITERT_OK, let ptr = responsePtr else {
                 await MainActor.run {
@@ -420,8 +428,8 @@ class EngineViewModel {
                 self.currentBackend = useGPU ? "GPU (Metal)" : "CPU (XNNPACK)"
                 self.isSwitchingBackend = false
                 self.statusMessage = self.toolCallingEnabled
-                    ? "Calendar assistant ready"
-                    : "Backend switched to \(self.currentBackend)"
+                ? "Calendar assistant ready"
+                : "Backend switched to \(self.currentBackend)"
             }
         }
     }

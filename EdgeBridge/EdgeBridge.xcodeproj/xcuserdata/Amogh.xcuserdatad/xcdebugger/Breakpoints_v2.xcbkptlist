@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Bucket
+   uuid = "9B57F703-0C47-48D9-8C6A-6B58289AE91A"
+   type = "1"
+   version = "2.0">
+   <Breakpoints>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "5A7445DD-B14D-49FE-9267-8EED9C6BF9D9"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "EdgeBridge/Tools/CalendarToolExecutor.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "126"
+            endingLineNumber = "126"
+            landmarkName = "execute(functionName:arguments:)"
+            landmarkType = "7">
+            <Locations>
+               <Location
+                  uuid = "5A7445DD-B14D-49FE-9267-8EED9C6BF9D9 - 6ebf7ac0060df4aa"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "(1) suspend resume partial function for EdgeBridge.CalendarToolExecutor.execute(functionName: Swift.String, arguments: Swift.Dictionary&lt;Swift.String, Any&gt;) async -&gt; Swift.String"
+                  moduleName = "EdgeBridge.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/Amogh/Workspace/Mobile_Apps/EdgeBridge/EdgeBridge/EdgeBridge/Tools/CalendarToolExecutor.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "127"
+                  endingLineNumber = "127">
+               </Location>
+               <Location
+                  uuid = "5A7445DD-B14D-49FE-9267-8EED9C6BF9D9 - 8dc8aa5154e328a8"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "(3) suspend resume partial function for EdgeBridge.CalendarToolExecutor.execute(functionName: Swift.String, arguments: Swift.Dictionary&lt;Swift.String, Any&gt;) async -&gt; Swift.String"
+                  moduleName = "EdgeBridge.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/Amogh/Workspace/Mobile_Apps/EdgeBridge/EdgeBridge/EdgeBridge/Tools/CalendarToolExecutor.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "127"
+                  endingLineNumber = "127">
+               </Location>
+            </Locations>
+         </BreakpointContent>
+      </BreakpointProxy>
+   </Breakpoints>
+</Bucket>
