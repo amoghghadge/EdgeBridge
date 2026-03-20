@@ -4,6 +4,8 @@
 // This header is the ONLY LiteRT-LM header that Xcode needs to see.
 // All complex C++ dependencies (absl, protobuf, nlohmann/json) stay
 // hidden behind this C interface.
+//
+// v2 — Added constrained decoding support.
 
 #ifndef LITERT_LM_RUNTIME_BRIDGE_LITERT_BRIDGE_API_H_
 #define LITERT_LM_RUNTIME_BRIDGE_LITERT_BRIDGE_API_H_
@@ -31,6 +33,15 @@ typedef enum {
   LITERT_ERROR_NOT_INITIALIZED = 4,
   LITERT_ERROR_UNKNOWN = 99,
 } LiteRTStatus;
+
+// Constraint types for constrained decoding.
+// These map to LLGuidance's constraint types.
+typedef enum {
+  LITERT_CONSTRAINT_NONE = 0,        // No constraint (free generation)
+  LITERT_CONSTRAINT_JSON_SCHEMA = 1, // JSON Schema constraint
+  LITERT_CONSTRAINT_REGEX = 2,       // Regular expression constraint
+  LITERT_CONSTRAINT_LARK = 3,        // Lark grammar constraint
+} LiteRTConstraintType;
 
 // Benchmark metrics from the most recent inference call.
 typedef struct {
@@ -67,10 +78,23 @@ void litert_engine_destroy(LiteRTEngineHandle engine);
 // system_prompt may be NULL for no system instruction.
 // tools_json may be NULL for no tool declarations;
 // otherwise it should be a JSON array string of tool schemas.
+// enable_constrained_decoding: if true, enables constrained decoding
+// using LLGuidance as the constraint provider. This allows per-message
+// constraints to be applied via litert_conversation_send_constrained().
 LiteRTStatus litert_conversation_create(
     LiteRTEngineHandle engine,
     const char* system_prompt,
     const char* tools_json,
+    LiteRTConversationHandle* conversation_out);
+
+// Create a Conversation with constrained decoding enabled.
+// Same as litert_conversation_create but explicitly enables or disables
+// the constrained decoding infrastructure.
+LiteRTStatus litert_conversation_create_ex(
+    LiteRTEngineHandle engine,
+    const char* system_prompt,
+    const char* tools_json,
+    int enable_constrained_decoding,
     LiteRTConversationHandle* conversation_out);
 
 // Destroy a Conversation.
@@ -88,6 +112,21 @@ LiteRTStatus litert_conversation_send(
     const char* user_message,
     const char** response_out);
 
+// Send a user message with a decoding constraint (blocking).
+// constraint_type: the type of constraint to apply.
+// constraint_string: the constraint pattern/schema/grammar.
+//   - For JSON_SCHEMA: a JSON schema string.
+//   - For REGEX: a regular expression string.
+//   - For LARK: a Lark grammar string.
+//   - For NONE: ignored (pass NULL).
+// This forces the model's output to conform to the given constraint.
+LiteRTStatus litert_conversation_send_constrained(
+    LiteRTConversationHandle conversation,
+    const char* user_message,
+    LiteRTConstraintType constraint_type,
+    const char* constraint_string,
+    const char** response_out);
+
 // Send a user message with streaming callback (non-blocking).
 // The callback is invoked on a background thread for each token chunk.
 // A NULL token signals completion. The callback must be thread-safe.
@@ -102,6 +141,16 @@ LiteRTStatus litert_conversation_send_async(
 LiteRTStatus litert_conversation_send_tool_response(
     LiteRTConversationHandle conversation,
     const char* tool_result_json,
+    const char** response_out);
+
+// Send a tool response with a decoding constraint on the model's reply.
+// This is useful to ensure the model produces valid JSON for its next
+// tool call after receiving a tool result.
+LiteRTStatus litert_conversation_send_tool_response_constrained(
+    LiteRTConversationHandle conversation,
+    const char* tool_result_json,
+    LiteRTConstraintType constraint_type,
+    const char* constraint_string,
     const char** response_out);
 
 // --- Metrics ---

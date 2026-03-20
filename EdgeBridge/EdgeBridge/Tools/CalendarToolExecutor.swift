@@ -125,7 +125,10 @@ class CalendarToolExecutor {
             
         case "search_events":
             let query = arguments["query"] as? String ?? ""
-            let days = arguments["days_ahead"] as? Int ?? 30
+            var days = arguments["days_ahead"] as? Int ?? 30
+            if days == 0 {
+                days = 30
+            }
             return searchEvents(query: query, daysAhead: days)
             
         case "check_conflicts":

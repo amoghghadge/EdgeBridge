@@ -1,2 +1,3 @@
 EdgeBridgeHelloWorld/EdgeBridgeHelloWorld/gemma3_1b_int4.tflite
 EdgeBridge/Libs/libLiteRTLM.a
+EdgeBridge/Libs/libLiteRTLM_rust.a

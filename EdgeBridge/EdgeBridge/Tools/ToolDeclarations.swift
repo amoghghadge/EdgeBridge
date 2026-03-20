@@ -191,6 +191,55 @@ enum ToolDeclarations {
     ]
     """
     
+    // Add to ToolDeclarations enum:
+    
+    /// JSON Schema that constrains the model's tool-call output format.
+    /// This ensures the model always produces valid tool_calls JSON.
+    static let toolCallJsonSchema: String = """
+    {
+      "type": "object",
+      "properties": {
+        "tool_calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["function"]
+              },
+              "function": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "enum": [
+                      "get_events",
+                      "get_week_events",
+                      "find_free_slots",
+                      "create_event",
+                      "modify_event",
+                      "delete_event",
+                      "search_events",
+                      "check_conflicts"
+                    ]
+                  },
+                  "arguments": {
+                    "type": "object"
+                  }
+                },
+                "required": ["name", "arguments"]
+              }
+            },
+            "required": ["type", "function"]
+          },
+          "minItems": 1
+        }
+      },
+      "required": ["tool_calls"]
+    }
+    """
+    
     static func getDynamicSystemPrompt() -> String {
         let now = Date()
         

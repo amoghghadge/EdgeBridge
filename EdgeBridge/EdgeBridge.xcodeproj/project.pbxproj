@@ -16,6 +16,7 @@
 		CA60EE1D2F59043500D50066 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EE1C2F59043500D50066 /* AudioToolbox.framework */; };
 		CA60EE1F2F59129900D50066 /* libGemmaModelConstraintProvider.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = CA60EE1E2F59129900D50066 /* libGemmaModelConstraintProvider.dylib */; };
 		CA60EE202F59129900D50066 /* libGemmaModelConstraintProvider.dylib in Embed Libraries */ = {isa = PBXBuildFile; fileRef = CA60EE1E2F59129900D50066 /* libGemmaModelConstraintProvider.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		CA93527B2F6CB3E30020BB73 /* libLiteRTLM_rust.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CA93527A2F6CB3E30020BB73 /* libLiteRTLM_rust.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -42,6 +43,7 @@
 		CA60EE1A2F59042D00D50066 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		CA60EE1C2F59043500D50066 /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
 		CA60EE1E2F59129900D50066 /* libGemmaModelConstraintProvider.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libGemmaModelConstraintProvider.dylib; path = Libs/libGemmaModelConstraintProvider.dylib; sourceTree = "<group>"; };
+		CA93527A2F6CB3E30020BB73 /* libLiteRTLM_rust.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libLiteRTLM_rust.a; path = Libs/libLiteRTLM_rust.a; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -70,6 +72,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CA93527B2F6CB3E30020BB73 /* libLiteRTLM_rust.a in Frameworks */,
 				CA60EE152F58FF1200D50066 /* MetalPerformanceShaders.framework in Frameworks */,
 				CA60EE0C2F58FC9900D50066 /* libLiteRTLM.a in Frameworks */,
 				CA60EE1B2F59042D00D50066 /* AVFoundation.framework in Frameworks */,
@@ -104,6 +107,7 @@
 		CA60EE0A2F58FB6D00D50066 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				CA93527A2F6CB3E30020BB73 /* libLiteRTLM_rust.a */,
 				CA60EE1E2F59129900D50066 /* libGemmaModelConstraintProvider.dylib */,
 				CA60EE1C2F59043500D50066 /* AudioToolbox.framework */,
 				CA60EE1A2F59042D00D50066 /* AVFoundation.framework */,
