@@ -6,17 +6,17 @@
 //
 
 // ============================================================================
-// CalendarToolExecutor.swift  (v2 — Enhanced Calendar Agent)
+// CalendarToolExecutor.swift  (v3 — Sync Execution Path)
 //
-// IMPROVEMENTS OVER v1:
-// 1. Events now include location, notes, URL, and attendee info
-// 2. Merged get_todays_events into get_events_for_date (accepts "today"/"tomorrow")
-// 3. Added get_week_events for weekly overview
-// 4. Added search_events to find events by title keyword
-// 5. Added check_conflicts to detect scheduling overlaps
-// 6. Added modify_event to reschedule existing events
-// 7. Better date parsing with relative dates ("next monday", etc.)
-// 8. All-day events handled properly
+// WHAT'S NEW IN v3:
+//   - Added executeSync() for calling from background threads without
+//     async/await. This avoids DispatchSemaphore deadlocks in Swift's
+//     cooperative thread pool when called from Task.detached contexts.
+//   - Internal dispatch extracted into private dispatchTool() method
+//     shared by both execute() and executeSync().
+//   - All tool implementations remain synchronous (EventKit is sync).
+//   - The only async part is requestAccess(), which is pre-called
+//     during app initialization.
 // ============================================================================
 
 import EventKit
@@ -37,22 +37,22 @@ class CalendarToolExecutor {
     
     private let displayTimeFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateStyle = .none
-        f.timeStyle = .short
+        f.dateFormat = "h:mm a"  // Explicit format: "8:00 AM" with regular space.
+        f.locale = Locale(identifier: "en_US_POSIX")  // Prevents iOS narrow no-break space.
         return f
     }()
     
     private let displayDateFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .none
+        f.dateFormat = "MMM d, yyyy"  // "Mar 22, 2026" — matches training data.
+        f.locale = Locale(identifier: "en_US_POSIX")
         return f
     }()
     
     private let displayDateTimeFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .short
+        f.dateFormat = "MMM d, yyyy, h:mm a"  // "Mar 22, 2026, 8:00 AM"
+        f.locale = Locale(identifier: "en_US_POSIX")
         return f
     }()
     
@@ -69,7 +69,7 @@ class CalendarToolExecutor {
         }
     }
     
-    // MARK: - Unified Dispatch
+    // MARK: - Async Dispatch (for standalone use)
     
     func execute(functionName: String, arguments: [String: Any]) async -> String {
         if !hasAccess {
@@ -81,7 +81,27 @@ class CalendarToolExecutor {
                 ])
             }
         }
-        
+        return dispatchTool(functionName: functionName, arguments: arguments)
+    }
+    
+    // MARK: - Synchronous Dispatch (for background thread use)
+    
+    /// Synchronous version of execute() — safe to call from Task.detached
+    /// without semaphores. Requires that requestAccess() was called during init.
+    func executeSync(functionName: String, arguments: [String: Any]) -> String {
+        if !hasAccess {
+            return encodeResult([
+                "error": "Calendar access denied. Please grant permission in Settings.",
+                "tool_name": functionName
+            ])
+        }
+        return dispatchTool(functionName: functionName, arguments: arguments)
+    }
+    
+    // MARK: - Internal Tool Dispatch
+    
+    /// Routes to the correct tool implementation. All implementations are synchronous.
+    private func dispatchTool(functionName: String, arguments: [String: Any]) -> String {
         switch functionName {
         case "get_events":
             let dateStr = arguments["date"] as? String ?? "today"
@@ -158,8 +178,6 @@ class CalendarToolExecutor {
     
     // MARK: - Tool Implementations
     
-    /// Returns all events on a specific date. Accepts "today", "tomorrow",
-    /// "yesterday", or a YYYY-MM-DD date string.
     private func getEvents(dateString: String) -> String {
         guard let date = parseDate(dateString) else {
             return encodeResult([
@@ -187,7 +205,6 @@ class CalendarToolExecutor {
         ])
     }
     
-    /// Returns events for an entire week starting from the given date.
     private func getWeekEvents(startDateString: String) -> String {
         guard let startDate = parseDate(startDateString) else {
             return encodeResult([
@@ -205,7 +222,6 @@ class CalendarToolExecutor {
         )
         let events = eventStore.events(matching: predicate)
         
-        // Group events by day for a clear weekly overview.
         var dayGroups: [[String: Any]] = []
         for dayOffset in 0..<7 {
             let day = calendar.date(byAdding: .day, value: dayOffset, to: startOfWeek)!
@@ -234,7 +250,6 @@ class CalendarToolExecutor {
         ])
     }
     
-    /// Finds available time slots of a given duration on a specific date.
     private func findFreeSlots(dateString: String, durationMinutes: Int) -> String {
         guard let date = parseDate(dateString) else {
             return encodeResult([
@@ -252,10 +267,10 @@ class CalendarToolExecutor {
             withStart: windowStart, end: windowEnd, calendars: nil
         )
         let events = eventStore.events(matching: predicate)
-            .filter { !$0.isAllDay }  // Exclude all-day events from free slot computation.
+            .filter { !$0.isAllDay }
             .sorted { $0.startDate < $1.startDate }
         
-        var freeSlots: [[String: String]] = []
+        var freeSlots: [[String: Any]] = []
         var currentTime = windowStart
         let requiredDuration = TimeInterval(durationMinutes * 60)
         
@@ -265,7 +280,7 @@ class CalendarToolExecutor {
                 freeSlots.append([
                     "start": displayTimeFormatter.string(from: currentTime),
                     "end": displayTimeFormatter.string(from: event.startDate),
-                    "duration_minutes": "\(Int(gap / 60))"
+                    "duration_minutes": Int(gap / 60)
                 ])
             }
             if event.endDate > currentTime {
@@ -278,7 +293,7 @@ class CalendarToolExecutor {
             freeSlots.append([
                 "start": displayTimeFormatter.string(from: currentTime),
                 "end": displayTimeFormatter.string(from: windowEnd),
-                "duration_minutes": "\(Int(finalGap / 60))"
+                "duration_minutes": Int(finalGap / 60)
             ])
         }
         
@@ -293,7 +308,6 @@ class CalendarToolExecutor {
         ])
     }
     
-    /// Creates a new calendar event with full metadata.
     private func createEvent(
         title: String, startTime: String, endTime: String,
         location: String?, notes: String?, calendarName: String?
@@ -350,7 +364,6 @@ class CalendarToolExecutor {
         }
     }
     
-    /// Modifies an existing event (reschedule, rename, change location).
     private func modifyEvent(
         eventId: String, newTitle: String?,
         newStart: String?, newEnd: String?, newLocation: String?
@@ -385,7 +398,6 @@ class CalendarToolExecutor {
         }
     }
     
-    /// Deletes a calendar event by its identifier.
     private func deleteEvent(eventId: String) -> String {
         guard let event = eventStore.event(withIdentifier: eventId) else {
             return encodeResult([
@@ -411,7 +423,6 @@ class CalendarToolExecutor {
         }
     }
     
-    /// Searches for events by title keyword within the next N days.
     private func searchEvents(query: String, daysAhead: Int) -> String {
         let now = Date()
         let future = Calendar.current.date(byAdding: .day, value: daysAhead, to: now)!
@@ -439,7 +450,6 @@ class CalendarToolExecutor {
         ])
     }
     
-    /// Checks if a proposed time slot conflicts with existing events.
     private func checkConflicts(startTime: String, endTime: String) -> String {
         guard let startDate = parseDateTime(startTime) else {
             return encodeResult([
@@ -470,7 +480,6 @@ class CalendarToolExecutor {
         ])
     }
     
-    /// Returns the next N upcoming events.
     private func getUpcomingEvents(count: Int) -> String {
         let now = Date()
         let future = Calendar.current.date(byAdding: .day, value: 30, to: now)!
@@ -490,8 +499,6 @@ class CalendarToolExecutor {
     
     // MARK: - Event Formatting
     
-    /// Formats an EKEvent into a comprehensive dictionary including
-    /// location, notes, attendees, and all-day status.
     private func formatEvent(_ event: EKEvent) -> [String: Any] {
         var dict: [String: Any] = [
             "title": event.title ?? "Untitled",
@@ -499,7 +506,6 @@ class CalendarToolExecutor {
             "event_id": event.eventIdentifier ?? ""
         ]
         
-        // Time info — handle all-day events differently.
         if event.isAllDay {
             dict["all_day"] = true
             dict["date"] = displayDateFormatter.string(from: event.startDate)
@@ -508,28 +514,19 @@ class CalendarToolExecutor {
             dict["start_time"] = displayTimeFormatter.string(from: event.startDate)
             dict["end_time"] = displayTimeFormatter.string(from: event.endDate)
             dict["date"] = displayDateFormatter.string(from: event.startDate)
-            
-            // Duration in minutes for convenience.
             let durationMinutes = Int(event.endDate.timeIntervalSince(event.startDate) / 60)
             dict["duration_minutes"] = durationMinutes
         }
         
-        // Location — this was missing in v1!
         if let location = event.location, !location.isEmpty {
             dict["location"] = location
         }
-        
-        // Notes
         if let notes = event.notes, !notes.isEmpty {
             dict["notes"] = notes
         }
-        
-        // URL
         if let url = event.url {
             dict["url"] = url.absoluteString
         }
-        
-        // Attendees (if any)
         if let attendees = event.attendees, !attendees.isEmpty {
             dict["attendees"] = attendees.compactMap { participant -> [String: String]? in
                 guard let name = participant.name else { return nil }
@@ -539,8 +536,6 @@ class CalendarToolExecutor {
                 ]
             }
         }
-        
-        // Recurrence info
         if event.hasRecurrenceRules {
             dict["recurring"] = true
         }
@@ -554,7 +549,6 @@ class CalendarToolExecutor {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let calendar = Calendar.current
         
-        // Relative dates
         switch trimmed {
         case "today":
             return Date()
@@ -580,12 +574,10 @@ class CalendarToolExecutor {
             break
         }
         
-        // YYYY-MM-DD
         if let date = dateOnlyFormatter.date(from: string) {
             return date
         }
         
-        // ISO 8601 variants
         let flexFormatter = DateFormatter()
         flexFormatter.locale = Locale(identifier: "en_US_POSIX")
         

@@ -570,17 +570,11 @@ class EngineViewModel {
                     ))
                 }
                 
-                // Use a semaphore to bridge async tool execution.
-                let semaphore = DispatchSemaphore(value: 0)
-                var toolResult = ""
-                Task {
-                    toolResult = await self.calendarExecutor.execute(
-                        functionName: toolCall.name,
-                        arguments: toolCall.arguments
-                    )
-                    semaphore.signal()
-                }
-                semaphore.wait()
+                // Execute tool synchronously — we're already on a background thread.
+                let toolResult = self.calendarExecutor.executeSync(
+                    functionName: toolCall.name,
+                    arguments: toolCall.arguments
+                )
                 
                 let resultDisplay = self.formatToolResultDisplay(toolCall.name, result: toolResult)
                 Task { @MainActor in

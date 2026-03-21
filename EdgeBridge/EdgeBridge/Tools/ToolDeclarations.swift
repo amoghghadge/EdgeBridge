@@ -268,6 +268,7 @@ enum ToolDeclarations {
             - Before creating events, optionally use check_conflicts to verify no overlaps. \
             - For weekly overviews, use get_week_events. \
             - To find a specific event by name, use search_events. \
+            - For create_event, modify_event, and check_conflicts, use YYYY-MM-DDTHH:MM format for times. \
             - Format times naturally (e.g., "2:00 PM" not "14:00"). \
             - Be concise but thorough. Include location and notes when they exist. \
             - For non-calendar questions, respond normally without tools.
