@@ -5,19 +5,18 @@
 //  Created by Amogh Ghadge on 3/4/26.
 //
 
-import Foundation
-
 // ============================================================================
-// ChatView.swift  (v3 — Agentic Calendar Assistant)
+// ChatView.swift  (v4 — Dual-Model Cascade + Constrained Decoding Demo)
 //
-// Updated to support the agentic tool-calling loop. Key additions:
-//   - Tool call messages shown as action cards (distinct from chat bubbles)
-//   - Tool result messages shown as compact status cards
-//   - Calendar agent mode toggle in the header
-//   - Model name display
-//   - Info.plist must include NSCalendarsFullAccessUsageDescription for EventKit
+// WHAT'S NEW IN v4:
+//   - Model attribution: assistant bubbles show which model responded
+//   - Smart Mode indicator and toggle in the header
+//   - Constrained Decoding demo button (runs on Gemma)
+//   - Model picker now has "Smart Mode" option at top
+//   - Routing indicator shows when model is switching
 // ============================================================================
 
+import Foundation
 import SwiftUI
 
 struct ChatView: View {
@@ -40,7 +39,7 @@ struct ChatView: View {
             inputBar
         }
         .onAppear {
-            discoverAndLoadModel()
+            viewModel.discoverModelsAndInitialize(useGPU: useGPU)
         }
         .onDisappear {
             viewModel.cleanup()
@@ -55,18 +54,30 @@ struct ChatView: View {
     private var headerBar: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("EdgeBridge")
-                    .font(.headline)
+                HStack(spacing: 6) {
+                    Text("EdgeBridge")
+                        .font(.headline)
+                    if viewModel.smartModeEnabled {
+                        Text("SMART")
+                            .font(.system(size: 8, weight: .bold))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.purple.opacity(0.2))
+                            .foregroundStyle(.purple)
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                    }
+                }
                 if !viewModel.currentModelName.isEmpty {
                     Text(viewModel.currentModelName)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
             
             Spacer()
             
-            if viewModel.isSwitchingBackend {
+            if viewModel.isSwitchingModel {
                 ProgressView()
                     .scaleEffect(0.7)
             }
@@ -78,7 +89,7 @@ struct ChatView: View {
             Toggle("GPU", isOn: $useGPU)
                 .toggleStyle(.switch)
                 .labelsHidden()
-                .disabled(viewModel.isSwitchingBackend || !viewModel.isEngineReady)
+                .disabled(viewModel.isSwitchingModel || !viewModel.isEngineReady)
                 .onChange(of: useGPU) { _, newValue in
                     viewModel.toggleBackend(useGPU: newValue)
                 }
@@ -91,40 +102,60 @@ struct ChatView: View {
     
     private var statusBar: some View {
         HStack(spacing: 8) {
-            // Loading spinner.
-            if !viewModel.isEngineReady && viewModel.statusMessage.contains("Loading") {
-                ProgressView()
-                    .scaleEffect(0.6)
-            }
-            
-            // Calendar agent indicator.
-            if viewModel.toolCallingEnabled && viewModel.isEngineReady {
-                Image(systemName: "calendar.badge.checkmark")
+            // Status icon + text.
+            HStack(spacing: 5) {
+                if viewModel.isEngineReady {
+                    // Model role icon.
+                    Image(systemName: viewModel.activeModelRole == .general
+                          ? "bubble.left.and.bubble.right.fill"
+                          : "calendar.badge.checkmark")
+                        .font(.caption)
+                        .foregroundStyle(viewModel.activeModelRole == .general ? .blue : .green)
+                        .frame(width: 16, alignment: .center)
+                } else if viewModel.statusMessage.contains("Loading") || viewModel.statusMessage.contains("Switching") {
+                    // Spinner replaces the icon while loading.
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .frame(width: 16, height: 14)
+                }
+                Text(viewModel.statusMessage)
                     .font(.caption)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(
+                        viewModel.statusMessage.contains("Failed") ? .red : .secondary
+                    )
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            
-            Text(viewModel.statusMessage)
-                .font(.caption)
-                .foregroundStyle(
-                    viewModel.statusMessage.contains("Failed") ? .red : .secondary
-                )
             
             Spacer()
+            
+            // Constrained Decoding demo button.
+            Button(action: {
+                viewModel.runConstrainedDecodingDemo()
+            }) {
+                HStack(spacing: 3) {
+                    Image(systemName: "lock.shield")
+                    Text("CD Test")
+                }
+                .font(.caption)
+            }
+            .disabled(!viewModel.smartModeEnabled || !viewModel.isEngineReady || viewModel.isGenerating)
             
             // Model selector button.
             Button(action: {
                 availableModels = ModelDiscovery.findAllModels()
-                if availableModels.count > 1 {
-                    showModelPicker = true
-                }
+                showModelPicker = true
             }) {
-                Image(systemName: "doc.badge.gearshape")
-                    .font(.caption)
+                HStack(spacing: 3) {
+                    Image(systemName: "doc.badge.gearshape")
+                    Text("Models")
+                }
+                .font(.caption)
             }
         }
         .padding(.horizontal)
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
+        .frame(minHeight: 30)
         .background(Color(.systemGray6))
     }
     
@@ -134,7 +165,7 @@ struct ChatView: View {
     private var benchmarkBar: some View {
         if !viewModel.benchmarkText.isEmpty {
             Text(viewModel.benchmarkText)
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
                 .padding(.vertical, 4)
@@ -158,7 +189,7 @@ struct ChatView: View {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .scaleEffect(0.8)
-                            Text("Thinking...")
+                            Text(viewModel.isSwitchingModel ? "Switching model..." : "Thinking...")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -171,10 +202,13 @@ struct ChatView: View {
                 }
                 .padding()
             }
-            .onTapGesture {
-                isInputFocused = false
-            }
+            .scrollDismissesKeyboard(.interactively)
             .onChange(of: viewModel.messages.count) { _, _ in
+                withAnimation {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+            }
+            .onChange(of: viewModel.isGenerating) { _, _ in
                 withAnimation {
                     proxy.scrollTo("bottom", anchor: .bottom)
                 }
@@ -187,28 +221,30 @@ struct ChatView: View {
     private var inputBar: some View {
         HStack(spacing: 12) {
             TextField(
-                viewModel.toolCallingEnabled
-                    ? "Ask about your schedule..."
-                    : "Ask something...",
+                viewModel.smartModeEnabled
+                    ? "Ask anything..."
+                    : viewModel.toolCallingEnabled
+                        ? "Ask about your schedule..."
+                        : "Ask something...",
                 text: $inputText
             )
             .textFieldStyle(.plain)
             .focused($isInputFocused)
             .onSubmit { send() }
-            .disabled(!viewModel.isEngineReady)
+            .disabled(!viewModel.isEngineReady && !viewModel.smartModeEnabled)
             
             Button(action: send) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
                     .foregroundStyle(
-                        inputText.isEmpty || !viewModel.isEngineReady
+                        inputText.isEmpty || (!viewModel.isEngineReady && !viewModel.isSwitchingModel)
                             ? .gray : .blue
                     )
             }
             .disabled(
                 inputText.isEmpty ||
                 viewModel.isGenerating ||
-                !viewModel.isEngineReady
+                (!viewModel.isEngineReady && !viewModel.smartModeEnabled)
             )
         }
         .padding()
@@ -218,22 +254,58 @@ struct ChatView: View {
     
     private var modelPickerSheet: some View {
         NavigationStack {
-            List(availableModels, id: \.path) { model in
-                Button(action: {
-                    showModelPicker = false
-                    viewModel.cleanup()
-                    
-                    // Save the user's choice so it loads automatically next time!
-                    ModelDiscovery.saveLastUsedModel(path: model.path)
-                    
-                    viewModel.initialize(modelPath: model.path, useGPU: useGPU)
-                }) {
-                    VStack(alignment: .leading) {
-                        Text(model.name)
-                            .font(.body)
-                        Text(model.path)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+            List {
+                // Smart Mode option (if both models available).
+                if viewModel.smartModeAvailable {
+                    Section("Smart Mode") {
+                        Button(action: {
+                            showModelPicker = false
+                            viewModel.enableSmartMode(useGPU: useGPU)
+                        }) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 4) {
+                                        Text("Auto-Route (Qwen + Gemma)")
+                                            .font(.body)
+                                        if viewModel.smartModeEnabled {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundStyle(.green)
+                                                .font(.caption)
+                                        }
+                                    }
+                                    Text("Calendar queries → Qwen 3B | General → Gemma E2B")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+                
+                // Individual models.
+                Section("Individual Models") {
+                    ForEach(availableModels, id: \.path) { model in
+                        Button(action: {
+                            showModelPicker = false
+                            viewModel.loadManualModel(path: model.path, useGPU: useGPU)
+                        }) {
+                            VStack(alignment: .leading) {
+                                HStack(spacing: 4) {
+                                    Text(model.name)
+                                        .font(.body)
+                                    if !viewModel.smartModeEnabled &&
+                                        viewModel.loadedModelPath == model.path {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(.green)
+                                            .font(.caption)
+                                    }
+                                }
+                                Text(model.path)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }
@@ -257,20 +329,10 @@ struct ChatView: View {
         isInputFocused = false
         viewModel.sendMessage(text)
     }
-    
-    private func discoverAndLoadModel() {
-        if let modelPath = ModelDiscovery.findModel() {
-            viewModel.initialize(modelPath: modelPath, useGPU: useGPU)
-        } else {
-            viewModel.statusMessage =
-                "No model found — copy a .litertlm file to the app's Documents folder"
-        }
-    }
 }
 
 // MARK: - MessageRow
 
-/// Routes each message to the appropriate visual component based on role.
 struct MessageRow: View {
     let message: ChatMessage
     
@@ -279,7 +341,7 @@ struct MessageRow: View {
         case .user:
             UserBubble(content: message.content)
         case .assistant:
-            AssistantBubble(content: message.content)
+            AssistantBubble(content: message.content, modelName: message.modelName)
         case .toolCall:
             ToolActionCard(content: message.content, isResult: false)
         case .toolResult:
@@ -313,17 +375,25 @@ struct UserBubble: View {
     }
 }
 
-// MARK: - Assistant Bubble
+// MARK: - Assistant Bubble (with model attribution)
 
 struct AssistantBubble: View {
     let content: String
+    let modelName: String?
     
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("EdgeBridge")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text("EdgeBridge")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    if let name = modelName {
+                        Text("· \(shortenModelName(name))")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(modelColor(name))
+                    }
+                }
                 Text(content)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -334,20 +404,38 @@ struct AssistantBubble: View {
             Spacer(minLength: 60)
         }
     }
+    
+    /// Shortens the model filename for display.
+    private func shortenModelName(_ name: String) -> String {
+        let lower = name.lowercased()
+        if lower.contains("calendar-qwen") { return "Qwen 3B (fine-tuned)" }
+        if lower.contains("qwen2.5-3b-instruct") { return "Qwen 3B (base)" }
+        if lower.contains("qwen") { return "Qwen" }
+        if lower.contains("gemma") && lower.contains("e2b") { return "Gemma E2B" }
+        if lower.contains("gemma") && lower.contains("e4b") { return "Gemma E4B" }
+        if lower.contains("gemma") && lower.contains("1b") { return "Gemma 1B" }
+        if lower.contains("gemma") { return "Gemma" }
+        if lower.contains("phi") { return "Phi-4" }
+        return String(name.prefix(15))
+    }
+    
+    /// Color-codes model attribution.
+    private func modelColor(_ name: String) -> Color {
+        let lower = name.lowercased()
+        if lower.contains("qwen") { return .green }
+        if lower.contains("gemma") { return .blue }
+        return .secondary
+    }
 }
 
 // MARK: - Tool Action Card
 
-/// Displays tool calls and results as compact, visually distinct cards.
-/// Tool calls show what the model is doing (e.g., "📅 Checking schedule...").
-/// Tool results show the outcome (e.g., "✅ Found 3 events").
 struct ToolActionCard: View {
     let content: String
     let isResult: Bool
     
     var body: some View {
         HStack(spacing: 8) {
-            // Accent bar on the left edge.
             RoundedRectangle(cornerRadius: 2)
                 .fill(isResult ? Color.green : Color.orange)
                 .frame(width: 3)
