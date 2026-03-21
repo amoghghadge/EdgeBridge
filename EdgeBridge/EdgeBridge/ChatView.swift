@@ -35,6 +35,7 @@ struct ChatView: View {
             statusBar
             benchmarkBar
             messageList
+            fallbackBar
             Divider()
             inputBar
         }
@@ -171,6 +172,33 @@ struct ChatView: View {
                 .padding(.vertical, 4)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(.systemGray6).opacity(0.5))
+        }
+    }
+    
+    // MARK: - Fallback Bar
+    
+    @ViewBuilder
+    private var fallbackBar: some View {
+        if viewModel.fallbackAvailable {
+            HStack {
+                Text("Calendar model didn't use tools.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(action: {
+                    viewModel.retryWithGemma()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                        Text("Try Gemma")
+                    }
+                    .font(.caption)
+                    .fontWeight(.medium)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color.blue.opacity(0.08))
         }
     }
     

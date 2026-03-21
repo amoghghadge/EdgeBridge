@@ -87,6 +87,11 @@ class EngineViewModel {
     // Whether the current model has tool calling enabled.
     var toolCallingEnabled: Bool = false
     
+    // Fallback: when Qwen responds without tools in Smart Mode,
+    // offer to retry with Gemma for a better general answer.
+    var fallbackAvailable: Bool = false
+    private var pendingFallbackText: String?
+    
     // Maximum number of tool-call rounds per user message.
     private let maxToolRounds = 100
     
@@ -367,6 +372,10 @@ class EngineViewModel {
     func sendMessage(_ text: String) {
         guard isEngineReady || smartModeEnabled else { return }
         
+        // Clear any pending fallback offer.
+        fallbackAvailable = false
+        pendingFallbackText = nil
+        
         // In Smart Mode, check if we need to switch models.
         if smartModeEnabled {
             let needsCalendar = isCalendarQuery(text)
@@ -602,12 +611,33 @@ class EngineViewModel {
         
         // === FINAL RESPONSE ===
         let trimmedResponse = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noToolsUsed = (toolRound == 0)
+        
         Task { @MainActor in
             self.messages.append(ChatMessage(
                 role: .assistant,
                 content: trimmedResponse,
                 modelName: modelTag
             ))
+            
+            // Fallback detection: if Smart Mode is on, Qwen was the active model,
+            // and it responded WITHOUT using any tools, the query probably wasn't
+            // calendar-related. Offer to retry with Gemma for a better answer.
+            if noToolsUsed && self.smartModeEnabled && self.activeModelRole == .calendar {
+                // Store the original user text (not the context-prefixed version)
+                // by finding the last user message in the conversation.
+                let originalUserText = self.messages.last(where: { $0.role == .user })?.content ?? text
+                self.pendingFallbackText = originalUserText
+                self.fallbackAvailable = true
+                self.messages.append(ChatMessage(
+                    role: .system,
+                    content: "The calendar model responded without using tools. Want a better answer from the general model?"
+                ))
+            } else {
+                self.fallbackAvailable = false
+                self.pendingFallbackText = nil
+            }
+            
             self.isGenerating = false
             self.updateBenchmark()
         }
@@ -788,6 +818,28 @@ class EngineViewModel {
     private func isValidJson(_ string: String) -> Bool {
         guard let data = string.data(using: .utf8) else { return false }
         return (try? JSONSerialization.jsonObject(with: data)) != nil
+    }
+    
+    // MARK: - Fallback: Retry with Gemma
+    
+    /// When Qwen responds without tools in Smart Mode, the user can tap
+    /// "Try Gemma" to re-send the same query to the general model.
+    func retryWithGemma() {
+        guard let text = pendingFallbackText,
+              let gemmaPath = generalModelPath,
+              smartModeEnabled else { return }
+        
+        fallbackAvailable = false
+        pendingFallbackText = nil
+        
+        // Remove the fallback offer message.
+        if let last = messages.last, last.role == .system,
+           last.content.contains("general model") {
+            messages.removeLast()
+        }
+        
+        // switchAndSend handles the routing message and model swap.
+        switchAndSend(text: text, targetRole: .general, path: gemmaPath)
     }
     
     // MARK: - Manual Model Loading (for model picker)
