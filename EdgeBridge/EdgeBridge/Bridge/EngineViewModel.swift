@@ -493,7 +493,7 @@ class EngineViewModel {
             }
             
             // Now send the original message on the newly loaded model.
-            self.sendMessageDirectFromBackground(text)
+            await self.sendMessageDirectFromBackground(text)
         }
     }
     
@@ -521,12 +521,12 @@ class EngineViewModel {
         isGenerating = true
         
         Task.detached { [self] in
-            self.performInference(text: actualText, conversation: conversation)
+            await self.performInference(text: actualText, conversation: conversation)
         }
     }
     
     /// Sends a message from within an already-running background Task.
-    private func sendMessageDirectFromBackground(_ text: String) {
+    private func sendMessageDirectFromBackground(_ text: String) async {
         guard let conversation = conversationHandle else {
             Task { @MainActor in self.isGenerating = false }
             return
@@ -538,18 +538,18 @@ class EngineViewModel {
             actualText = context + text
         }
         
-        performInference(text: actualText, conversation: conversation)
+        await performInference(text: actualText, conversation: conversation)
     }
     
     /// Core inference logic — shared by direct and switch-then-send paths.
-    private func performInference(text: String, conversation: LiteRTConversationHandle) {
+    private func performInference(text: String, conversation: LiteRTConversationHandle) async {
         let modelTag = self.currentModelName
         
         var responsePtr: UnsafePointer<CChar>?
         let status = litert_conversation_send(conversation, text, &responsePtr)
         
         guard status == LITERT_OK, let ptr = responsePtr else {
-            Task { @MainActor in
+            await MainActor.run {
                 self.messages.append(ChatMessage(
                     role: .assistant,
                     content: "[Error: inference failed with code \(status.rawValue)]",
@@ -570,7 +570,9 @@ class EngineViewModel {
             
             for toolCall in toolCalls {
                 let toolCallDisplay = self.formatToolCallDisplay(toolCall)
-                Task { @MainActor in
+                // await MainActor.run blocks until the UI updates,
+                // ensuring tool calls appear one at a time in real time.
+                await MainActor.run {
                     self.messages.append(ChatMessage(
                         role: .toolCall,
                         content: toolCallDisplay,
@@ -586,7 +588,7 @@ class EngineViewModel {
                 )
                 
                 let resultDisplay = self.formatToolResultDisplay(toolCall.name, result: toolResult)
-                Task { @MainActor in
+                await MainActor.run {
                     self.messages.append(ChatMessage(
                         role: .toolResult,
                         content: resultDisplay,
@@ -594,6 +596,10 @@ class EngineViewModel {
                         modelName: modelTag
                     ))
                 }
+                
+                // Brief yield so SwiftUI renders the green result card
+                // before XNNPACK saturates the CPU with the next inference.
+                try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
                 
                 var nextResponsePtr: UnsafePointer<CChar>?
                 let nextStatus = litert_conversation_send_tool_response(
