@@ -2,7 +2,7 @@
 
 **On-device LLM inference for iOS with agentic tool calling, dual-model cascade routing, fine-tuned calendar intelligence, and constrained decoding — all running locally on an iPhone with zero cloud dependencies.**
 
-EdgeBridge is a native iOS application that runs 3-billion-parameter language models entirely on-device using Google's [LiteRT-LM](https://github.com/google-ai-edge/LiteRT/tree/main/litert/lm) C++ inference framework, cross-compiled from source for iOS `arm64` via Bazel. The app implements an agentic calendar assistant that performs real-time tool calling against Apple's EventKit, a dual-model cascade architecture with automatic query routing, and constrained decoding infrastructure backed by Microsoft's LLGuidance — all without any network connection.
+EdgeBridge is a native iOS application that runs 3-billion-parameter language models entirely on-device using Google's [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) C++ inference framework, cross-compiled from source for iOS `arm64` via Bazel. The app implements an agentic calendar assistant that performs real-time tool calling against Apple's EventKit, a dual-model cascade architecture with automatic query routing, and constrained decoding infrastructure backed by Microsoft's LLGuidance — all without any network connection.
 
 > **Demo:** See [`demo.mov`](demo.mov) for a walkthrough of Smart Mode in airplane mode — the user greets the assistant (routed to Gemma for general conversation), then asks about their schedule (automatically routed to the fine-tuned Qwen calendar agent with live EventKit tool calls).
 
@@ -49,28 +49,28 @@ EdgeBridge bridges this gap.
                               └──────────────┬─────────────────────┘
                                              │
                               ┌──────────────▼─────────────────────┐
-                              │     EngineViewModel (Swift)         │
-                              │  ┌───────────────────────────────┐  │
-                              │  │    Keyword Router              │  │
-                              │  │  "schedule" → Calendar Model   │  │
-                              │  │  "hello"    → General Model    │  │
-                              │  └───────────┬───────────────────┘  │
-                              │              │                      │
-                      ┌───────┴──────────────┴──────────────┐       │
-                      │                                     │       │
-           ┌──────────▼──────────┐           ┌──────────────▼────┐  │
-           │  Qwen 3B            │           │  Gemma 3n E2B     │  │
-           │  (fine-tuned)       │           │  (general)        │  │
-           │  Calendar Agent     │           │  Conversation +   │  │
-           │  + Tool Calling     │           │  Constrained Dec. │  │
-           └──────────┬──────────┘           └───────────────────┘  │
-                      │                                             │
-           ┌──────────▼──────────┐                                  │
-           │  Agentic Tool Loop  │                                  │
-           │  ┌────────────────┐ │                                  │
-           │  │ Parse tool call│ │                                  │
-           │  │ Execute via    │ │                                  │
-           │  │ EventKit       │◄├──── CalendarToolExecutor ────────┘
+                              │     EngineViewModel (Swift)        │
+                              │  ┌───────────────────────────────┐ │
+                              │  │    Keyword Router             │ │
+                              │  │  "schedule" → Calendar Model  │ │
+                              │  │  "hello"    → General Model   │ │
+                              │  └───────────┬───────────────────┘ │
+                              │              │                     │
+                      ┌───────┴──────────────┴──────────────┐      │
+                      │                                     │      │
+           ┌──────────▼──────────┐           ┌──────────────▼────┐ │
+           │  Qwen 3B            │           │  Gemma 3n E2B     │ │
+           │  (fine-tuned)       │           │  (general)        │ │
+           │  Calendar Agent     │           │  Conversation +   │ │
+           │  + Tool Calling     │           │  Constrained Dec. │ │
+           └──────────┬──────────┘           └───────────────────┘ │
+                      │                                            │
+           ┌──────────▼──────────┐                                 │
+           │  Agentic Tool Loop  │                                 │
+           │  ┌────────────────┐ │                                 │
+           │  │ Parse tool call│ │                                 │
+           │  │ Execute via    │ │                                 │
+           │  │ EventKit       │◄├──── CalendarToolExecutor ───────┘
            │  │ Send result    │ │     (8 tools, real calendar)
            │  │ Loop until done│ │
            │  └────────────────┘ │
@@ -88,7 +88,7 @@ EdgeBridge bridges this gap.
     │  ┌─────────┐  ┌──────────────────┐ │
     │  │ XNNPACK │  │ LLGuidance       │ │
     │  │ (CPU)   │  │ (constrained     │ │
-    │  │         │  │  decoding, Rust)  │ │
+    │  │         │  │  decoding, Rust) │ │
     │  └─────────┘  └──────────────────┘ │
     │  libLiteRTLM.a  libLiteRTLM_rust.a │
     └────────────────────────────────────┘
