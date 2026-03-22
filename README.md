@@ -13,14 +13,13 @@ EdgeBridge is a native iOS application that runs 3-billion-parameter language mo
 - [Motivation](#motivation)
 - [Architecture Overview](#architecture-overview)
 - [Technical Deep Dive](#technical-deep-dive)
-  - [1. Cross-Compiling LiteRT-LM for iOS](#1-cross-compiling-litert-lm-for-ios)
+  - [1. Building LiteRT-LM from Source for iOS](#1-building-litert-lm-from-source-for-ios)
   - [2. Swift/C++ Interop via Pure C Bridge](#2-swiftc-interop-via-pure-c-bridge)
   - [3. Agentic Calendar Tool Calling](#3-agentic-calendar-tool-calling)
   - [4. Fine-Tuning Pipeline](#4-fine-tuning-pipeline)
   - [5. Constrained Decoding](#5-constrained-decoding)
   - [6. Dual-Model Cascade Architecture](#6-dual-model-cascade-architecture)
   - [7. GPU Acceleration Toggle](#7-gpu-acceleration-toggle)
-- [Bugs Discovered and Fixed](#bugs-discovered-and-fixed)
 - [Test Results](#test-results)
 - [Project Structure](#project-structure)
 - [Build and Run](#build-and-run)
@@ -35,7 +34,7 @@ Mobile applications are shifting from cloud-dependent API wrappers to autonomous
 2. **Absolute privacy** — user data never leaves the device
 3. **Zero cloud cost** — compute is offloaded to the user's hardware
 
-However, achieving this on iOS presents a significant systems engineering challenge. Google's LiteRT-LM framework provides high-performance C++ inference for on-device models, but **it has no official iOS support** — no prebuilt binaries, no iOS build targets, and no documentation for Apple platforms. Building a production-quality agentic app on this foundation requires solving cross-compilation, linking, fine-tuning, and architecture challenges that don't exist in typical mobile development.
+However, achieving this on iOS presents a significant systems engineering challenge. Google's [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) framework provides high-performance C++ inference for on-device models and does list iOS as a supported platform with Bazel build configs. But the iOS developer experience is still maturing — the Swift SDK is listed as "In Dev" (not stable), the documentation is Android-first, and there is no high-level Swift API equivalent to the Android/Kotlin SDK. Building a production-quality agentic app required compiling LiteRT-LM from source, writing a custom C interop bridge (since the Swift SDK isn't ready), solving non-trivial linking challenges with mixed C++/Rust static archives, fine-tuning a model for reliable tool calling, and designing the multi-model architecture from scratch.
 
 EdgeBridge bridges this gap.
 
@@ -110,19 +109,23 @@ EdgeBridge bridges this gap.
 
 ## Technical Deep Dive
 
-### 1. Cross-Compiling LiteRT-LM for iOS
+### 1. Building LiteRT-LM from Source for iOS
 
-**The core challenge: LiteRT-LM doesn't officially support iOS.** There are no prebuilt iOS binaries, no `ios_arm64` build targets in the repository, and no documentation for Apple platforms. The framework's build system targets Android and Linux. Getting it to run on iOS required solving multiple layers of cross-compilation, linking, and runtime integration problems.
+LiteRT-LM does officially list iOS as a supported platform, and the Bazel build system includes `--config=ios_arm64` build targets. However, there is no high-level Swift SDK yet (it's listed as "In Dev"), the documentation is Android/Kotlin-first, and the repo does not provide a turnkey "build and integrate into your Xcode project" workflow. The work here was in actually building the framework from source, solving the linking challenges that arise from its mixed C++/Rust codebase, and integrating the result into an Xcode project manually.
+
+#### Why Build from Source
+
+LiteRT-LM's prebuilt iOS artifacts are limited — for example, `libGemmaModelConstraintProvider.dylib` is available prebuilt for `ios_arm64`, but the core inference library itself needs to be compiled from source to produce the static archives that Xcode can link against. There is no prebuilt `.xcframework` or CocoaPod for the core engine. Building from source was the path to getting the full inference stack into an iOS app.
 
 #### Bazel Cross-Compilation
 
-LiteRT-LM is built with Bazel. Cross-compiling for iOS `arm64` required:
+Building the core library:
 
 ```
 bazel build //runtime:litert_lm_lib --config=ios_arm64
 ```
 
-This immediately hit a **macOS 26 (Tahoe) incompatibility**: Bazel's Apple rules couldn't detect the new OS version, causing the build system to fail before compilation even started. The fix required a `.bazelrc.user` with explicit SDK version overrides:
+On macOS 26 (Tahoe), this hit a compatibility issue: Bazel's Apple rules couldn't detect the new OS version, causing the build to fail before compilation started. The fix required a `.bazelrc.user` with explicit SDK version overrides:
 
 ```
 build --macos_sdk_version=15.5
@@ -144,6 +147,8 @@ The solution is a **dual-archive strategy** that separates C++ and Rust artifact
 
 The `-force_load` flag on the C++ archive ensures all symbols are included (LiteRT-LM uses static registration patterns that the linker would otherwise strip). The Rust archive is linked normally, which allows the linker to resolve only the symbols actually referenced — eliminating all 15,987 duplicates.
 
+This was the hardest part of the iOS integration. The LiteRT-LM build system is designed to produce a single linked binary or Android AAR, not a set of static archives for manual Xcode integration. Figuring out which objects belonged to C++ vs. Rust, and that they needed different linking strategies, required inspecting the Bazel build graph and the contents of each archive.
+
 #### Xcode Integration
 
 The final Xcode project configuration:
@@ -159,9 +164,12 @@ The final Xcode project configuration:
 
 ### 2. Swift/C++ Interop via Pure C Bridge
 
-Swift 5.9 introduced direct C++ interoperability, but this approach was evaluated and abandoned. LiteRT-LM's headers transitively include `absl`, `protobuf`, `nlohmann/json`, `XNNPACK`, and other heavy C++ dependencies with complex template metaprogramming that Swift's C++ bridge cannot handle.
+LiteRT-LM's Swift SDK is listed as "In Dev" and is not yet available. Two alternatives were evaluated:
 
-The solution is a **pure C API bridge** (`litert_bridge_api.h` / `litert_bridge_api.cc`) that hides all C++ complexity behind 12 `extern "C"` functions. Swift sees only opaque `void*` handles and C enums — the same pattern used by production frameworks like Core ML and TensorFlow Lite's C API.
+1. **Swift 5.9 direct C++ interop** — abandoned because LiteRT-LM's headers transitively include `absl`, `protobuf`, `nlohmann/json`, `XNNPACK`, and other heavy C++ dependencies with complex template metaprogramming that Swift's C++ bridge cannot handle
+2. **Pure C API bridge** — adopted. This is the standard approach used by production frameworks like Core ML and TensorFlow Lite's C API
+
+The bridge (`litert_bridge_api.h` / `litert_bridge_api.cc`) hides all C++ complexity behind 12 `extern "C"` functions. Swift sees only opaque `void*` handles and C enums.
 
 ```c
 // Opaque handle types — callers never see the C++ internals
@@ -311,7 +319,7 @@ A Python script generates **1,360 training examples** across 10 generator functi
 **Format Matching** is the most critical aspect of the training data. The dataset uses:
 - **No system message** — the Jinja template defaults to "You are Qwen, created by Alibaba Cloud..." which matches what LiteRT-LM produces at runtime
 - **`[Context: ...]` prepended to user messages** — identical to `EngineViewModel`'s runtime format
-- **Tool arguments in ISO format** (`YYYY-MM-DDTHH:MM`) while display text uses human-readable format (`h:mm a`, `MMM d, yyyy`) — matching the `en_US_POSIX` locale formatters in `CalendarToolExecutor`
+- **Tool arguments in ISO format** (`YYYY-MM-DDTHH:MM`) while display text uses human-readable format (`h:mm a`, `MMM d, yyyy`) — matching the `en_US_POSIX` locale formatters in `CalendarToolExecutor`. This matters because iOS `DateFormatter` with `.timeStyle = .short` produces `8:00\u{202f}AM` (narrow no-break space, Unicode U+202F between the time and AM/PM), while Python's `strftime` produces `8:00 AM` (regular space). The model was trained on regular spaces, so iOS-formatted tool results caused malformed timestamps. The fix: explicit format strings with `en_US_POSIX` locale, which guarantees ASCII-only formatting with regular spaces
 - **90/10 train/eval split** via a metadata field
 
 Each example simulates a random date/time context, generates realistic calendar events with varying combinations of titles, locations, notes, and calendars, and produces the complete multi-turn conversation including tool calls and tool results.
@@ -489,36 +497,12 @@ A purple **SMART** badge appears in the header when Smart Mode is active.
 
 ### 7. GPU Acceleration Toggle
 
-The app UI includes a GPU toggle switch that is currently non-functional (the backend always falls back to CPU/XNNPACK). This is intentional — the toggle is implemented and wired through the entire stack (`LiteRTBackend.GPU` → `litert_engine_create()` → Metal backend initialization), but **LiteRT-LM's Metal/GPU backend for iOS is not yet available in the framework**. The LiteRT-LM team has GPU acceleration for Android (via OpenCL/GPU delegate), but the iOS Metal backend is still under development.
+The app UI includes a GPU toggle switch that is wired through the entire stack (`LiteRTBackend.GPU` → `litert_engine_create()` → Metal backend initialization), but currently falls back to CPU/XNNPACK at runtime. LiteRT-LM's platform support table lists GPU as supported on iOS, and the macOS prebuilt directory ships `libLiteRtMetalAccelerator.dylib`. However, the iOS prebuilt directory (`prebuilt/ios_arm64/`) does not include the Metal accelerator library — only `libGemmaModelConstraintProvider.dylib` is provided. It's possible the Metal backend works if built from source with the right Bazel targets, but I haven't confirmed this yet.
 
 The toggle remains in the UI to:
-1. Demonstrate that the architecture supports backend switching without code changes
-2. Be ready for immediate activation when LiteRT-LM ships Metal support for iOS
-3. Show awareness of the performance optimization path (Metal + Apple Neural Engine would significantly reduce inference latency)
-
-When the GPU backend becomes available, the only change needed is in the C++ bridge implementation — `litert_engine_create()` would pass the GPU backend flag to LiteRT-LM's engine constructor, and Metal/ANE inference would activate automatically. No Swift-side changes required.
-
----
-
-## Bugs Discovered and Fixed
-
-### iOS Narrow No-Break Space (`\u{202f}`)
-
-**Problem**: iOS `DateFormatter` with `.timeStyle = .short` produces `8:00\u{202f}AM` (narrow no-break space, Unicode U+202F), while Python's `strftime` produces `8:00 AM` (regular space, U+0020). The model was trained on regular spaces, so when iOS-formatted tool results were sent back to the model, it produced malformed ISO timestamps in `create_event` arguments — the model had never seen the narrow no-break space character during training and couldn't map it back to a time format.
-
-**Fix**: All `DateFormatter` instances in `CalendarToolExecutor` use explicit format strings (`"h:mm a"`, `"MMM d, yyyy"`) with `Locale(identifier: "en_US_POSIX")` locale. The `en_US_POSIX` locale guarantees ASCII-only formatting with regular spaces, matching the training data exactly.
-
-### DispatchSemaphore Deadlock in Swift Cooperative Thread Pool
-
-**Problem**: The original `CalendarToolExecutor` used `DispatchSemaphore` inside a `Task.detached` block to bridge async EventKit calls to synchronous tool execution. This deadlocked because Swift's cooperative thread pool has a fixed number of threads. Blocking one thread with `semaphore.wait()` while the async task it's waiting for needs a thread from the same pool creates a circular dependency — the pool is exhausted, and both the semaphore and the async task are stuck.
-
-**Fix**: Since EventKit's calendar query APIs (`predicateForEvents`, `events(matching:)`, `save()`, `remove()`) are all synchronous, the `executeSync()` method calls them directly without any async/await or semaphore bridging. The `requestAccess()` call (which is genuinely async) is performed once during app initialization, before any tool calls occur.
-
-### Stale Model Handle Race Condition
-
-**Problem**: When the user rapidly switches between models in the picker, multiple background `Task.detached` blocks can be loading different models simultaneously. If a slow load completes after a fast load, it overwrites the handles with stale references, causing the app to use the wrong model or crash on the next inference.
-
-**Fix**: A `loadGeneration` counter increments on every load or cleanup. Each background task captures the counter value at start and checks it against the current value before committing handles. If the counter has changed (meaning a newer load was initiated), the stale load discards its handles and exits.
+1. Demonstrate that the architecture supports backend switching without Swift-side code changes
+2. Be ready for activation once the iOS Metal accelerator library is available (either prebuilt or compiled from source)
+3. Show awareness of the performance optimization path — Metal + Apple Neural Engine would significantly reduce inference latency compared to CPU-only XNNPACK
 
 ---
 
