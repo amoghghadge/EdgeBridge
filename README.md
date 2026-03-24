@@ -10,7 +10,7 @@ EdgeBridge is a native iOS application that runs 3-billion-parameter language mo
 
 | Demo |
 | :---: |
-| <video src="" width="300" controls> </video> |
+| <video src="https://github.com/user-attachments/assets/cc468bb7-ede0-4dc0-b43f-71766f89a00d" width="300" controls> </video> |
 
 </div>
 
