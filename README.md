@@ -6,6 +6,14 @@ EdgeBridge is a native iOS application that runs 3-billion-parameter language mo
 
 > **Demo:** See [`demo.mov`](demo.mov) for a walkthrough of Smart Mode in airplane mode — the user greets the assistant (routed to Gemma for general conversation), then asks about their schedule (automatically routed to the fine-tuned Qwen calendar agent with live EventKit tool calls).
 
+<div align="left">
+
+| Demo |
+| :---: |
+| <video src="" width="300" controls> </video> |
+
+</div>
+
 ---
 
 ## Table of Contents
